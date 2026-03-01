@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mutasi Filter Pro - Ahmad Zulfikar T</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 20px; background-color: #f4f7f9; min-height: 100vh; display: flex; flex-direction: column; }
+        .container { max-width: 1100px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); flex: 1; }
+        .config-panel { background: #eef2f7; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #d1d9e6; }
+        .row { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 10px; }
+        .input-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 150px; }
+        select, input { padding: 10px; border: 1px solid #bec8d0; border-radius: 6px; font-size: 14px; }
+        .search-box { width: 100%; border-color: #3498db; }
+        
+        .info-rekening { background: #2c3e50; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none; border-left: 5px solid #f1c40f; }
+        .info-rekening h3 { margin: 0; font-size: 1.1rem; color: #f1c40f; text-transform: uppercase; }
+        .info-rekening p { margin: 5px 0 0 0; opacity: 0.9; font-family: 'Courier New', monospace; letter-spacing: 1px; }
+
+        .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .card { padding: 15px; border-radius: 8px; color: white; }
+        .debit-card { background: #e74c3c; }
+        .credit-card { background: #27ae60; }
+        .val { font-size: 1.5rem; font-weight: bold; font-family: 'Consolas', monospace; }
+
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th { background: #2c3e50; color: white; padding: 12px; text-align: left; font-size: 14px; position: sticky; top: 0; }
+        td { padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; vertical-align: top; }
+        .num-col { text-align: right; font-family: 'Courier New', monospace; font-weight: bold; font-size: 14px; }
+        .txt-red { color: #e74c3c; }
+        .txt-green { color: #27ae60; }
+        .date-col { font-weight: bold; color: #555; }
+        .btn-reset { padding: 10px; background: #95a5a6; color: white; border: none; border-radius: 6px; cursor: pointer; }
+
+        footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; border-top: 1px solid #eee; }
+        .heart { color: #e74c3c; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>📄 Convert Mutasi All Bank</h2>
+
+    <div class="config-panel">
+        <div class="row">
+            <div class="input-group">
+                <label><strong>1. Pilih Bank:</strong></label>
+                <select id="bankSource">
+                    <option value="">-- Pilih Bank --</option>
+                    <option value="BCA">BCA (Corporate)</option>
+                    <option value="BNI">BNI (Direct)</option>
+                    <option value="MANDIRI">Mandiri (Statement)</option>
+                    <option value="BRI">BRI (Corporate/CMS)</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label><strong>2. Upload CSV:</strong></label>
+                <input type="file" id="csvFile" accept=".csv">
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="input-group">
+                <label>Dari Tanggal:</label>
+                <input type="date" id="startDate">
+            </div>
+            <div class="input-group">
+                <label>Sampai Tanggal:</label>
+                <input type="date" id="endDate">
+            </div>
+            <div class="input-group">
+                <label>&nbsp;</label>
+                <button class="btn-reset" onclick="resetFilters()">Reset Filter</button>
+            </div>
+        </div>
+        <div class="row">
+            <div class="input-group">
+                <label>Cari Keterangan:</label>
+                <input type="text" id="searchTerm" class="search-box" placeholder="Cari teks di keterangan...">
+            </div>
+        </div>
+    </div>
+
+    <div id="infoRekPanel" class="info-rekening">
+        <h3 id="dispBankName">BANK UNKNOWN</h3>
+        <p id="dispAccNo">No. Rekening: -</p>
+    </div>
+
+    <div class="summary-grid">
+        <div class="card debit-card">
+            <small>TOTAL DEBIT (KELUAR)</small>
+            <div id="dispDebit" class="val">0.00</div>
+        </div>
+        <div class="card credit-card">
+            <small>TOTAL CREDIT (MASUK)</small>
+            <div id="dispCredit" class="val">0.00</div>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th width="15%">Tanggal</th>
+                <th>Keterangan</th>
+                <th width="18%">Debit</th>
+                <th width="18%">Credit</th>
+            </tr>
+        </thead>
+        <tbody id="tableData">
+            <tr><td colspan="4" style="text-align:center; padding:40px; color:#999;">Pilih bank & upload file CSV.</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<footer> Made With <span class="heart">❤</span> Ahmad Zulfikar T </footer>
+
+<script>
+    let db = [];
+    const YEAR_DEFAULT = "2026"; 
+
+    const ACCOUNT_MAP = [
+        { bank: "BRI", acc: "113001000683303" }, { bank: "BRI", acc: "113001000750566" },
+        { bank: "BRI", acc: "034001002848309" }, { bank: "BRI", acc: "113001000661301" },
+        { bank: "BNI", acc: "1020190001" }, { bank: "BNI", acc: "1040170002" },
+        { bank: "BNI", acc: "1030170004" }, { bank: "BNI", acc: "1020170006" },
+        { bank: "BNI", acc: "2030170007" }, { bank: "MANDIRI", acc: "1260013546501" },
+        { bank: "BCA", acc: "5995333390" }
+    ];
+
+    function updateInfoDisplay(bank, acc) {
+        const panel = document.getElementById('infoRekPanel');
+        document.getElementById('dispBankName').innerText = `BANK ${bank}`;
+        document.getElementById('dispAccNo').innerText = `No. Rekening: ${acc}`;
+        panel.style.display = 'block';
+    }
+
+    function convertToISO(dateStr, bank) {
+        if (!dateStr) return "";
+        try {
+            if (bank === 'BNI') {
+                const p = dateStr.split('/');
+                return `20${p[2].substring(0,2)}-${p[1]}-${p[0]}`;
+            } else if (bank === 'MANDIRI') {
+                const months = {'January':'01','February':'02','March':'03','April':'04','May':'05','June':'06','July':'07','August':'08','September':'09','October':'10','November':'11','December':'12'};
+                const parts = dateStr.trim().split(' ');
+                return `${parts[2]}-${months[parts[1]]}-${parts[0].padStart(2, '0')}`;
+            } else if (bank === 'BRI') {
+                return dateStr.trim().split(' ')[0];
+            } else {
+                const monthsShort = {'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06','Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'};
+                const p = dateStr.split('-');
+                return `${YEAR_DEFAULT}-${monthsShort[p[1]]}-${p[0].padStart(2, '0')}`;
+            }
+        } catch(e) { return ""; }
+    }
+
+    function formatDisplayDate(isoDate) {
+        if (!isoDate) return "-";
+        const p = isoDate.split('-');
+        return `${p[2]}/${p[1]}/${p[0].substring(2)}`;
+    }
+
+    function cleanAmt(val) {
+        if (!val) return 0;
+        let res = val.toString().replace(/,/g, '').replace(/"/g, '');
+        return parseFloat(res) || 0;
+    }
+
+    function resetFilters() {
+        document.getElementById('startDate').value = "";
+        document.getElementById('endDate').value = "";
+        document.getElementById('searchTerm').value = "";
+        render();
+    }
+
+    document.getElementById('csvFile').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        const bank = document.getElementById('bankSource').value;
+        if (!bank) { alert("Pilih bank dulu!"); e.target.value = ''; return; }
+
+        document.getElementById('infoRekPanel').style.display = 'none';
+
+        // Deteksi berdasarkan nama file (Mandiri, BRI, BNI)
+        if (bank !== 'BCA') {
+            const found = ACCOUNT_MAP.find(item => file.name.includes(item.acc));
+            if (found) updateInfoDisplay(found.bank, found.acc);
+        }
+
+        Papa.parse(file, {
+            header: bank !== 'BCA', 
+            skipEmptyLines: true,
+            quoteChar: '"',
+            delimiter: (bank === 'BCA' || bank === 'MANDIRI') ? ";" : ",",
+            complete: (results) => {
+                const data = results.data;
+                db = [];
+                
+                if (bank === 'BCA') {
+                    // Treatment Khusus BCA: Scan Baris untuk No Rekening
+                    const accRow = data.find(r => r[0] && r[0].includes("No. rekening"));
+                    if (accRow) {
+                        const rawAcc = accRow[0].split(":")[1].trim();
+                        updateInfoDisplay("BCA", rawAcc);
+                    }
+
+                    let start = data.findIndex(r => r[0] && r[0].includes("Tanggal Transaksi")) + 1;
+                    for (let i = start; i < data.length; i++) {
+                        let r = data[i];
+                        if (!r[0] || r[0].includes("Saldo")) continue;
+                        let amt = cleanAmt(r[3]);
+                        let isCr = r[5] === "CR" || (r[4] && r[4].includes("CR"));
+                        db.push({ isoDate: convertToISO(r[0].trim(), 'BCA'), desc: r[1], deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
+                    }
+                } else if (bank === 'MANDIRI') {
+                    db = data.map(r => ({ isoDate: convertToISO(r['PostDate'], 'MANDIRI'), desc: r['Remarks'] + " " + (r['AdditionalDesc'] || ""), deb: cleanAmt(r['Debit Amount']), cre: cleanAmt(r['Credit Amount']) }));
+                } else if (bank === 'BRI') {
+                    db = data.map(r => ({ isoDate: convertToISO(r['TGL_TRAN'], 'BRI'), desc: r['DESK_TRAN'] || '', deb: cleanAmt(r['MUTASI_DEBET']), cre: cleanAmt(r['MUTASI_KREDIT']) }));
+                } else {
+                    db = data.map(r => ({ isoDate: convertToISO(r['Value Date']?.substring(0,8), 'BNI'), desc: r['Description'] || '', deb: cleanAmt(r['Debit']), cre: cleanAmt(r['Credit']) }));
+                }
+                render();
+            }
+        });
+    });
+
+    function render() {
+        const body = document.getElementById('tableData');
+        const search = document.getElementById('searchTerm').value.toLowerCase();
+        const startFilter = document.getElementById('startDate').value; 
+        const endFilter = document.getElementById('endDate').value;
+        body.innerHTML = '';
+        let sD = 0; let sC = 0;
+
+        const filtered = db.filter(i => {
+            const matchesSearch = i.desc.toLowerCase().includes(search);
+            let matchesDate = true;
+            if (i.isoDate) {
+                if (startFilter !== "" && i.isoDate < startFilter) matchesDate = false;
+                if (endFilter !== "" && i.isoDate > endFilter) matchesDate = false;
+            }
+            return matchesSearch && matchesDate;
+        });
+
+        filtered.forEach(i => {
+            sD += i.deb; sC += i.cre;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td class="date-col">${formatDisplayDate(i.isoDate)}</td><td style="font-size:11px">${i.desc}</td><td class="num-col txt-red">${i.deb > 0 ? i.deb.toFixed(2) : '0.00'}</td><td class="num-col txt-green">${i.cre > 0 ? i.cre.toFixed(2) : '0.00'}</td>`;
+            body.appendChild(tr);
+        });
+
+        document.getElementById('dispDebit').innerText = sD.toLocaleString('en-US',{minimumFractionDigits:2});
+        document.getElementById('dispCredit').innerText = sC.toLocaleString('en-US',{minimumFractionDigits:2});
+    }
+
+    document.getElementById('searchTerm').addEventListener('input', render);
+    document.getElementById('startDate').addEventListener('change', render);
+    document.getElementById('endDate').addEventListener('change', render);
+</script>
+</body>
+</html>
