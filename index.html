@@ -12,29 +12,19 @@
         .row { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 10px; }
         .input-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 150px; }
         select, input { padding: 10px; border: 1px solid #bec8d0; border-radius: 6px; font-size: 14px; }
-        .search-box { width: 100%; border-color: #3498db; }
-        
         .info-rekening { background: #2c3e50; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none; border-left: 5px solid #f1c40f; }
-        .info-rekening h3 { margin: 0; font-size: 1.1rem; color: #f1c40f; text-transform: uppercase; }
-        .info-rekening p { margin: 5px 0 0 0; opacity: 0.9; font-family: 'Courier New', monospace; letter-spacing: 1px; }
-
         .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
         .card { padding: 15px; border-radius: 8px; color: white; }
         .debit-card { background: #e74c3c; }
         .credit-card { background: #27ae60; }
         .val { font-size: 1.5rem; font-weight: bold; font-family: 'Consolas', monospace; }
-
         table { width: 100%; border-collapse: collapse; background: white; }
         th { background: #2c3e50; color: white; padding: 12px; text-align: left; font-size: 14px; position: sticky; top: 0; }
-        td { padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; vertical-align: top; }
-        .num-col { text-align: right; font-family: 'Courier New', monospace; font-weight: bold; font-size: 14px; }
+        td { padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; }
+        .num-col { text-align: right; font-family: 'Courier New', monospace; font-weight: bold; }
         .txt-red { color: #e74c3c; }
         .txt-green { color: #27ae60; }
-        .date-col { font-weight: bold; color: #555; }
-        .btn-reset { padding: 10px; background: #95a5a6; color: white; border: none; border-radius: 6px; cursor: pointer; }
-
-        footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; border-top: 1px solid #eee; }
-        .heart { color: #e74c3c; }
+        footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; }
     </style>
 </head>
 <body>
@@ -52,6 +42,8 @@
                     <option value="BNI">BNI (Direct)</option>
                     <option value="MANDIRI">Mandiri (Statement)</option>
                     <option value="BRI">BRI (Corporate/CMS)</option>
+                    <option value="BSI">BSI</option>
+                    <option value="MAYBANK">Maybank</option>
                 </select>
             </div>
             <div class="input-group">
@@ -59,228 +51,152 @@
                 <input type="file" id="csvFile" accept=".csv">
             </div>
         </div>
-
         <div class="row">
-            <div class="input-group">
-                <label>Dari Tanggal:</label>
-                <input type="date" id="startDate">
-            </div>
-            <div class="input-group">
-                <label>Sampai Tanggal:</label>
-                <input type="date" id="endDate">
-            </div>
-            <div class="input-group">
-                <label>&nbsp;</label>
-                <button class="btn-reset" onclick="resetFilters()">Reset Filter</button>
-            </div>
-        </div>
-        <div class="row">
-            <div class="input-group">
-                <label>Cari Keterangan:</label>
-                <input type="text" id="searchTerm" class="search-box" placeholder="Cari teks di keterangan...">
-            </div>
+            <div class="input-group"><label>Dari:</label><input type="date" id="startDate"></div>
+            <div class="input-group"><label>Sampai:</label><input type="date" id="endDate"></div>
+            <div class="input-group"><label>Cari:</label><input type="text" id="searchTerm" placeholder="Cari keterangan..."></div>
         </div>
     </div>
 
     <div id="infoRekPanel" class="info-rekening">
-        <h3 id="dispBankName">BANK UNKNOWN</h3>
+        <h3 id="dispBankName">BANK</h3>
         <p id="dispAccNo">No. Rekening: -</p>
     </div>
 
     <div class="summary-grid">
-        <div class="card debit-card">
-            <small>TOTAL DEBIT (KELUAR)</small>
-            <div id="dispDebit" class="val">0,00</div>
-        </div>
-        <div class="card credit-card">
-            <small>TOTAL CREDIT (MASUK)</small>
-            <div id="dispCredit" class="val">0,00</div>
-        </div>
+        <div class="card debit-card"><small>TOTAL DEBIT (KELUAR)</small><div id="dispDebit" class="val">0,00</div></div>
+        <div class="card credit-card"><small>TOTAL CREDIT (MASUK)</small><div id="dispCredit" class="val">0,00</div></div>
     </div>
 
     <table>
-        <thead>
-            <tr>
-                <th width="15%">Tanggal</th>
-                <th>Keterangan</th>
-                <th width="18%">Debit</th>
-                <th width="18%">Credit</th>
-            </tr>
-        </thead>
-        <tbody id="tableData">
-            <tr><td colspan="4" style="text-align:center; padding:40px; color:#999;">Pilih bank & upload file CSV.</td></tr>
-        </tbody>
+        <thead><tr><th>Tanggal</th><th>Keterangan</th><th>Debit</th><th>Credit</th></tr></thead>
+        <tbody id="tableData"><tr><td colspan="4" style="text-align:center; padding:40px;">Silahkan upload file.</td></tr></tbody>
     </table>
 </div>
 
-<footer> Made With <span class="heart">❤</span> Ahmad Zulfikar T </footer>
-
 <script>
     let db = [];
-    const YEAR_DEFAULT = "2026"; 
+    const YEAR_DEFAULT = "2026";
 
-    const ACCOUNT_MAP = [
-        { bank: "BRI", acc: "113001000683303" }, { bank: "BRI", acc: "113001000750566" },
-        { bank: "BRI", acc: "034001002848309" }, { bank: "BRI", acc: "113001000661301" },
-        { bank: "BNI", acc: "1020190001" }, { bank: "BNI", acc: "1040170002" },
-        { bank: "BNI", acc: "1030170004" }, { bank: "BNI", acc: "1020170006" },
-        { bank: "BNI", acc: "2030170007" }, { bank: "MANDIRI", acc: "1260013546501" },
-        { bank: "BCA", acc: "5995333390" }
-    ];
-
-    function updateInfoDisplay(bank, acc) {
-        const panel = document.getElementById('infoRekPanel');
-        document.getElementById('dispBankName').innerText = `BANK ${bank}`;
-        document.getElementById('dispAccNo').innerText = `No. Rekening: ${acc}`;
-        panel.style.display = 'block';
-    }
-
-    function convertToISO(dateStr, bank) {
-        if (!dateStr) return "";
-        try {
-            dateStr = dateStr.trim();
-            if (bank === 'BNI') {
-                const p = dateStr.split('/');
-                return `20${p[2].substring(0,2)}-${p[1]}-${p[0]}`;
-            } else if (bank === 'MANDIRI') {
-                const months = {'January':'01','February':'02','March':'03','April':'04','May':'05','June':'06','July':'07','August':'08','September':'09','October':'10','November':'11','December':'12'};
-                const parts = dateStr.split(' ');
-                return `${parts[2]}-${months[parts[1]]}-${parts[0].padStart(2, '0')}`;
-            } else if (bank === 'BRI') {
-                return dateStr.split(' ')[0];
-            } else {
-                // BCA Handling
-                if (dateStr.includes('/')) {
-                    const p = dateStr.split('/');
-                    return `${YEAR_DEFAULT}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
-                }
-                const monthsShort = {
-                    'JAN':'01','FEB':'02','MAR':'03','APR':'04','MAY':'05','JUN':'06','JUL':'07','AUG':'08','SEP':'09','OCT':'10','NOV':'11','DEC':'12',
-                    'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06','Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'
-                };
-                const p = dateStr.split('-');
-                const m = monthsShort[p[1]] || monthsShort[p[1]?.toUpperCase()] || '01';
-                return `${YEAR_DEFAULT}-${m}-${p[0].padStart(2, '0')}`;
-            }
-        } catch(e) { return ""; }
-    }
-
-    function formatDisplayDate(isoDate) {
-        if (!isoDate) return "-";
-        const p = isoDate.split('-');
-        return `${p[2]}/${p[1]}/${p[0].substring(2)}`;
-    }
+    const monthsMap = {
+        'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
+        'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12',
+        'January': '01', 'February': '02', 'March': '03', 'April': '04', 'May': '05', 'June': '06',
+        'July': '07', 'August': '08', 'September': '09', 'October': '10', 'November': '11', 'December': '12'
+    };
 
     function cleanAmt(val) {
-        if (!val) return 0;
-        // Hapus koma sebagai ribuan, pertahankan titik sebagai desimal
-        let res = val.toString().replace(/,/g, '').replace(/"/g, '');
-        return parseFloat(res) || 0;
+        if (!val || val === ".00" || val === "" || val === "-") return 0;
+        let s = val.toString().replace(/,/g, '').replace(/"/g, '').trim();
+        return parseFloat(s) || 0;
     }
 
-    function resetFilters() {
-        document.getElementById('startDate').value = "";
-        document.getElementById('endDate').value = "";
-        document.getElementById('searchTerm').value = "";
-        render();
+    function formatIDR(num) {
+        return num.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     document.getElementById('csvFile').addEventListener('change', function(e) {
         const file = e.target.files[0];
         const bank = document.getElementById('bankSource').value;
-        if (!bank) { alert("Pilih bank dulu!"); e.target.value = ''; return; }
-
-        document.getElementById('infoRekPanel').style.display = 'none';
-
-        // Deteksi rekening berdasarkan nama file (untuk bank selain BCA)
-        if (bank !== 'BCA') {
-            const found = ACCOUNT_MAP.find(item => file.name.includes(item.acc));
-            if (found) updateInfoDisplay(found.bank, found.acc);
-        }
+        if (!bank) return alert("Pilih bank dulu!");
 
         Papa.parse(file, {
-            header: bank !== 'BCA', 
+            header: true,
             skipEmptyLines: true,
-            quoteChar: '"',
             complete: (results) => {
                 const data = results.data;
                 db = [];
-                
-                if (bank === 'BCA') {
-                    // Cari baris No Rekening
-                    const accRow = data.find(r => r[0] && r[0].includes("No. rekening"));
-                    if (accRow) {
-                        const rawAcc = accRow[0].split(":")[1].trim();
-                        updateInfoDisplay("BCA", rawAcc);
-                    }
 
-                    let start = data.findIndex(r => r[0] && r[0].includes("Tanggal Transaksi")) + 1;
-                    for (let i = start; i < data.length; i++) {
-                        let r = data[i];
-                        // Skip baris kosong atau baris summary di bawah
-                        if (!r[0] || r[0].includes("Saldo") || r[0].includes("Mutasi")) continue;
-                        
-                        // Pada CSV BCA Corporate: r[3] berisi nominal + status (misal "1,500.00 CR")
-                        let amtStr = (r[3] || "").toString();
-                        let amt = cleanAmt(amtStr);
-                        let isCr = amtStr.toUpperCase().includes("CR");
-                        
-                        db.push({ 
-                            isoDate: convertToISO(r[0], 'BCA'), 
-                            desc: r[1], 
-                            deb: isCr ? 0 : amt, 
-                            cre: isCr ? amt : 0 
-                        });
+                data.forEach(r => {
+                    let iso = "", desc = "", deb = 0, cre = 0;
+
+                    if (bank === 'BSI') {
+                        // Date Format: 2026-02-03 02:15:11
+                        iso = (r['Date'] || "").split(' ')[0];
+                        desc = r['Description'];
+                        let amt = cleanAmt(r['Amount']);
+                        if (r['DB'] === 'DB') deb = amt;
+                        else if (r['CR'] === 'CR') cre = amt;
+                    } 
+                    else if (bank === 'MAYBANK') {
+                        // Date Format: 02-Feb-2026
+                        let p = (r['Posting Date'] || "").split('-');
+                        if (p.length === 3) iso = `${p[2]}-${monthsMap[p[1]]}-${p[0].padStart(2, '0')}`;
+                        desc = r['Transaction Description'];
+                        deb = cleanAmt(r['Debit']);
+                        cre = cleanAmt(r['Credit']);
                     }
-                } else if (bank === 'MANDIRI') {
-                    db = data.map(r => ({ isoDate: convertToISO(r['PostDate'], 'MANDIRI'), desc: r['Remarks'] + " " + (r['AdditionalDesc'] || ""), deb: cleanAmt(r['Debit Amount']), cre: cleanAmt(r['Credit Amount']) }));
-                } else if (bank === 'BRI') {
-                    db = data.map(r => ({ isoDate: convertToISO(r['TGL_TRAN'], 'BRI'), desc: r['DESK_TRAN'] || '', deb: cleanAmt(r['MUTASI_DEBET']), cre: cleanAmt(r['MUTASI_KREDIT']) }));
+                    else if (bank === 'BRI') {
+                        iso = (r['TGL_TRAN'] || "").split(' ')[0];
+                        desc = r['DESK_TRAN'];
+                        deb = cleanAmt(r['MUTASI_DEBET']);
+                        cre = cleanAmt(r['MUTASI_KREDIT']);
+                    }
+                    else if (bank === 'MANDIRI') {
+                        let p = (r['PostDate'] || "").split(' ');
+                        if (p.length === 3) iso = `${p[2]}-${monthsMap[p[1]]}-${p[0].padStart(2, '0')}`;
+                        desc = r['Remarks'] + " " + (r['AdditionalDesc'] || "");
+                        deb = cleanAmt(r['Debit Amount']);
+                        cre = cleanAmt(r['Credit Amount']);
+                    }
+                    // BCA & BNI biasanya butuh treatment non-header, tapi di sini kita satukan logikanya
+                    if (iso) db.push({ iso, desc, deb, cre });
+                });
+
+                // Khusus BCA karena formatnya unik (tanpa header standar)
+                if (bank === 'BCA') {
+                    Papa.parse(file, {
+                        header: false,
+                        complete: (res) => {
+                            db = [];
+                            let raw = res.data;
+                            let start = raw.findIndex(r => r[0] && r[0].includes("Tanggal Transaksi")) + 1;
+                            for (let i = start; i < raw.length; i++) {
+                                let r = raw[i];
+                                if (!r[0] || r[0].includes("Saldo") || r[0].includes("Mutasi")) continue;
+                                let p = r[0].split('/');
+                                let iso = `${YEAR_DEFAULT}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+                                let amtStr = (r[3] || "");
+                                let amt = cleanAmt(amtStr);
+                                let isCr = amtStr.toUpperCase().includes("CR");
+                                db.push({ iso, desc: r[1], deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
+                            }
+                            render();
+                        }
+                    });
                 } else {
-                    db = data.map(r => ({ isoDate: convertToISO(r['Value Date']?.substring(0,8), 'BNI'), desc: r['Description'] || '', deb: cleanAmt(r['Debit']), cre: cleanAmt(r['Credit']) }));
+                    render();
                 }
-                render();
             }
         });
     });
 
     function render() {
-        const body = document.getElementById('tableData');
-        const search = document.getElementById('searchTerm').value.toLowerCase();
-        const startFilter = document.getElementById('startDate').value; 
-        const endFilter = document.getElementById('endDate').value;
-        body.innerHTML = '';
-        let sD = 0; let sC = 0;
+        const term = document.getElementById('searchTerm').value.toLowerCase();
+        const start = document.getElementById('startDate').value;
+        const end = document.getElementById('endDate').value;
+        let sD = 0, sC = 0, html = '';
 
-        const filtered = db.filter(i => {
-            const matchesSearch = (i.desc || "").toLowerCase().includes(search);
-            let matchesDate = true;
-            if (i.isoDate) {
-                if (startFilter !== "" && i.isoDate < startFilter) matchesDate = false;
-                if (endFilter !== "" && i.isoDate > endFilter) matchesDate = false;
-            }
-            return matchesSearch && matchesDate;
-        });
-
-        filtered.forEach(i => {
+        db.filter(i => {
+            const mS = (i.desc || "").toLowerCase().includes(term);
+            const mD = (!start || i.iso >= start) && (!end || i.iso <= end);
+            return mS && mD;
+        }).forEach(i => {
             sD += i.deb; sC += i.cre;
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td class="date-col">${formatDisplayDate(i.isoDate)}</td>
+            html += `<tr>
+                <td>${i.iso.split('-').reverse().join('/')}</td>
                 <td style="font-size:11px">${i.desc}</td>
-                <td class="num-col txt-red">${i.deb > 0 ? i.deb.toLocaleString('id-ID', {minimumFractionDigits: 2}) : '0,00'}</td>
-                <td class="num-col txt-green">${i.cre > 0 ? i.cre.toLocaleString('id-ID', {minimumFractionDigits: 2}) : '0,00'}</td>
-            `;
-            body.appendChild(tr);
+                <td class="num-col txt-red">${i.deb > 0 ? formatIDR(i.deb) : '0,00'}</td>
+                <td class="num-col txt-green">${i.cre > 0 ? formatIDR(i.cre) : '0,00'}</td>
+            </tr>`;
         });
 
-        document.getElementById('dispDebit').innerText = sD.toLocaleString('id-ID', {minimumFractionDigits: 2});
-        document.getElementById('dispCredit').innerText = sC.toLocaleString('id-ID', {minimumFractionDigits: 2});
+        document.getElementById('tableData').innerHTML = html || '<tr><td colspan="4" style="text-align:center">Data tidak ditemukan</td></tr>';
+        document.getElementById('dispDebit').innerText = formatIDR(sD);
+        document.getElementById('dispCredit').innerText = formatIDR(sC);
     }
 
-    document.getElementById('searchTerm').addEventListener('input', render);
-    document.getElementById('startDate').addEventListener('change', render);
-    document.getElementById('endDate').addEventListener('change', render);
+    ['searchTerm', 'startDate', 'endDate'].forEach(id => document.getElementById(id).addEventListener('input', render));
 </script>
 </body>
 </html>
