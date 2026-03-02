@@ -39,10 +39,10 @@
                 <label><strong>1. Pilih Bank:</strong></label>
                 <select id="bankSource">
                     <option value="">-- Pilih Bank --</option>
-                    <option value="BCA">BCA</option>
-                    <option value="BNI">BNI</option>
-                    <option value="MANDIRI">Mandiri</option>
-                    <option value="BRI">BRI</option>
+                    <option value="BCA">BCA (Corporate)</option>
+                    <option value="BNI">BNI (Direct)</option>
+                    <option value="MANDIRI">Mandiri (Statement)</option>
+                    <option value="BRI">BRI (Corporate/CMS)</option>
                     <option value="BSI">BSI</option>
                     <option value="MAYBANK">Maybank</option>
                 </select>
@@ -85,6 +85,12 @@
         'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
     };
 
+    function showInfo(bank, acc) {
+        document.getElementById('dispBankName').innerText = "BANK " + bank;
+        document.getElementById('dispAccNo').innerText = "No. Rekening: " + (acc || "-");
+        document.getElementById('infoRekPanel').style.display = 'block';
+    }
+
     function cleanAmt(val) {
         if (!val || val === ".00" || val === "" || val === "-") return 0;
         let s = val.toString().replace(/,/g, '').replace(/"/g, '').trim();
@@ -100,6 +106,13 @@
         const bank = document.getElementById('bankSource').value;
         if (!bank) return alert("Pilih bank dulu!");
 
+        // Deteksi No Rekening dari nama file untuk BSI/Maybank/BNI/Mandiri/BRI
+        const fileName = file.name;
+        const matchAcc = fileName.match(/\d{10,}/); // Mencari angka 10 digit atau lebih
+        if (matchAcc && bank !== 'BCA') {
+            showInfo(bank, matchAcc[0]);
+        }
+
         Papa.parse(file, {
             header: bank !== 'BCA',
             skipEmptyLines: true,
@@ -110,9 +123,8 @@
                 if (bank === 'BCA') {
                     const accRow = data.find(r => r[0] && r[0].includes("No. rekening"));
                     if (accRow) {
-                        document.getElementById('dispBankName').innerText = "BANK BCA";
-                        document.getElementById('dispAccNo').innerText = "No. Rekening: " + accRow[0].split(":")[1].trim();
-                        document.getElementById('infoRekPanel').style.display = 'block';
+                        const accNo = accRow[0].split(":")[1].trim();
+                        showInfo("BCA", accNo);
                     }
                     let start = data.findIndex(r => r[0] && r[0].includes("Tanggal Transaksi")) + 1;
                     for (let i = start; i < data.length; i++) {
@@ -136,7 +148,7 @@
                         } 
                         else if (bank === 'MAYBANK') {
                             let p = (r['Posting Date'] || "").split('-');
-                            if (p.length === 3) iso = `${p[2]}-${monthsMap[p[1]]}-${p[0].padStart(2, '0')}`;
+                            if (p.length === 3) iso = `${p[2]}-${monthsMap[p[1]] || '01'}-${p[0].padStart(2, '0')}`;
                             desc = r['Transaction Description'];
                             deb = cleanAmt(r['Debit']);
                             cre = cleanAmt(r['Credit']);
@@ -155,7 +167,8 @@
                             cre = cleanAmt(r['Credit Amount']);
                         }
                         else if (bank === 'BNI') {
-                            let p = (r['Value Date'] || "").substring(0,8).split('/');
+                            let valDate = r['Value Date'] || "";
+                            let p = valDate.substring(0,8).split('/');
                             if(p.length === 3) iso = `20${p[2]}-${p[1]}-${p[0]}`;
                             desc = r['Description'];
                             deb = cleanAmt(r['Debit']);
