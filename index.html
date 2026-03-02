@@ -18,13 +18,14 @@
         .debit-card { background: #e74c3c; }
         .credit-card { background: #27ae60; }
         .val { font-size: 1.5rem; font-weight: bold; font-family: 'Consolas', monospace; }
-        table { width: 100%; border-collapse: collapse; background: white; }
+        table { width: 100%; border-collapse: collapse; background: white; margin-top: 10px; }
         th { background: #2c3e50; color: white; padding: 12px; text-align: left; font-size: 14px; position: sticky; top: 0; }
         td { padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; }
         .num-col { text-align: right; font-family: 'Courier New', monospace; font-weight: bold; }
         .txt-red { color: #e74c3c; }
         .txt-green { color: #27ae60; }
-        footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; }
+        footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; border-top: 1px solid #eee; }
+        .heart { color: #e74c3c; }
     </style>
 </head>
 <body>
@@ -38,10 +39,10 @@
                 <label><strong>1. Pilih Bank:</strong></label>
                 <select id="bankSource">
                     <option value="">-- Pilih Bank --</option>
-                    <option value="BCA">BCA (Corporate)</option>
-                    <option value="BNI">BNI (Direct)</option>
-                    <option value="MANDIRI">Mandiri (Statement)</option>
-                    <option value="BRI">BRI (Corporate/CMS)</option>
+                    <option value="BCA">BCA</option>
+                    <option value="BNI">BNI</option>
+                    <option value="MANDIRI">Mandiri</option>
+                    <option value="BRI">BRI</option>
                     <option value="BSI">BSI</option>
                     <option value="MAYBANK">Maybank</option>
                 </select>
@@ -52,15 +53,15 @@
             </div>
         </div>
         <div class="row">
-            <div class="input-group"><label>Dari:</label><input type="date" id="startDate"></div>
-            <div class="input-group"><label>Sampai:</label><input type="date" id="endDate"></div>
-            <div class="input-group"><label>Cari:</label><input type="text" id="searchTerm" placeholder="Cari keterangan..."></div>
+            <div class="input-group"><label>Dari Tanggal:</label><input type="date" id="startDate"></div>
+            <div class="input-group"><label>Sampai Tanggal:</label><input type="date" id="endDate"></div>
+            <div class="input-group"><label>Cari Keterangan:</label><input type="text" id="searchTerm" placeholder="Cari teks di keterangan..."></div>
         </div>
     </div>
 
     <div id="infoRekPanel" class="info-rekening">
-        <h3 id="dispBankName">BANK</h3>
-        <p id="dispAccNo">No. Rekening: -</p>
+        <h3 id="dispBankName" style="margin:0">BANK</h3>
+        <p id="dispAccNo" style="margin:5px 0 0 0">No. Rekening: -</p>
     </div>
 
     <div class="summary-grid">
@@ -70,19 +71,18 @@
 
     <table>
         <thead><tr><th>Tanggal</th><th>Keterangan</th><th>Debit</th><th>Credit</th></tr></thead>
-        <tbody id="tableData"><tr><td colspan="4" style="text-align:center; padding:40px;">Silahkan upload file.</td></tr></tbody>
+        <tbody id="tableData"><tr><td colspan="4" style="text-align:center; padding:40px; color:#999;">Pilih bank & upload file CSV.</td></tr></tbody>
     </table>
 </div>
+
+<footer> Made With <span class="heart">❤️</span> Ahmad Zulfikar T </footer>
 
 <script>
     let db = [];
     const YEAR_DEFAULT = "2026";
-
     const monthsMap = {
         'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
-        'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12',
-        'January': '01', 'February': '02', 'March': '03', 'April': '04', 'May': '05', 'June': '06',
-        'July': '07', 'August': '08', 'September': '09', 'October': '10', 'November': '11', 'December': '12'
+        'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
     };
 
     function cleanAmt(val) {
@@ -101,72 +101,70 @@
         if (!bank) return alert("Pilih bank dulu!");
 
         Papa.parse(file, {
-            header: true,
+            header: bank !== 'BCA',
             skipEmptyLines: true,
             complete: (results) => {
-                const data = results.data;
                 db = [];
+                const data = results.data;
 
-                data.forEach(r => {
-                    let iso = "", desc = "", deb = 0, cre = 0;
-
-                    if (bank === 'BSI') {
-                        // Date Format: 2026-02-03 02:15:11
-                        iso = (r['Date'] || "").split(' ')[0];
-                        desc = r['Description'];
-                        let amt = cleanAmt(r['Amount']);
-                        if (r['DB'] === 'DB') deb = amt;
-                        else if (r['CR'] === 'CR') cre = amt;
-                    } 
-                    else if (bank === 'MAYBANK') {
-                        // Date Format: 02-Feb-2026
-                        let p = (r['Posting Date'] || "").split('-');
-                        if (p.length === 3) iso = `${p[2]}-${monthsMap[p[1]]}-${p[0].padStart(2, '0')}`;
-                        desc = r['Transaction Description'];
-                        deb = cleanAmt(r['Debit']);
-                        cre = cleanAmt(r['Credit']);
-                    }
-                    else if (bank === 'BRI') {
-                        iso = (r['TGL_TRAN'] || "").split(' ')[0];
-                        desc = r['DESK_TRAN'];
-                        deb = cleanAmt(r['MUTASI_DEBET']);
-                        cre = cleanAmt(r['MUTASI_KREDIT']);
-                    }
-                    else if (bank === 'MANDIRI') {
-                        let p = (r['PostDate'] || "").split(' ');
-                        if (p.length === 3) iso = `${p[2]}-${monthsMap[p[1]]}-${p[0].padStart(2, '0')}`;
-                        desc = r['Remarks'] + " " + (r['AdditionalDesc'] || "");
-                        deb = cleanAmt(r['Debit Amount']);
-                        cre = cleanAmt(r['Credit Amount']);
-                    }
-                    // BCA & BNI biasanya butuh treatment non-header, tapi di sini kita satukan logikanya
-                    if (iso) db.push({ iso, desc, deb, cre });
-                });
-
-                // Khusus BCA karena formatnya unik (tanpa header standar)
                 if (bank === 'BCA') {
-                    Papa.parse(file, {
-                        header: false,
-                        complete: (res) => {
-                            db = [];
-                            let raw = res.data;
-                            let start = raw.findIndex(r => r[0] && r[0].includes("Tanggal Transaksi")) + 1;
-                            for (let i = start; i < raw.length; i++) {
-                                let r = raw[i];
-                                if (!r[0] || r[0].includes("Saldo") || r[0].includes("Mutasi")) continue;
-                                let p = r[0].split('/');
-                                let iso = `${YEAR_DEFAULT}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
-                                let amtStr = (r[3] || "");
-                                let amt = cleanAmt(amtStr);
-                                let isCr = amtStr.toUpperCase().includes("CR");
-                                db.push({ iso, desc: r[1], deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
-                            }
-                            render();
-                        }
-                    });
+                    const accRow = data.find(r => r[0] && r[0].includes("No. rekening"));
+                    if (accRow) {
+                        document.getElementById('dispBankName').innerText = "BANK BCA";
+                        document.getElementById('dispAccNo').innerText = "No. Rekening: " + accRow[0].split(":")[1].trim();
+                        document.getElementById('infoRekPanel').style.display = 'block';
+                    }
+                    let start = data.findIndex(r => r[0] && r[0].includes("Tanggal Transaksi")) + 1;
+                    for (let i = start; i < data.length; i++) {
+                        let r = data[i];
+                        if (!r[0] || r[0].includes("Saldo") || r[0].includes("Mutasi")) continue;
+                        let p = r[0].split('/');
+                        let iso = `${YEAR_DEFAULT}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+                        let amtStr = (r[3] || "");
+                        let amt = cleanAmt(amtStr);
+                        let isCr = amtStr.toUpperCase().includes("CR");
+                        db.push({ iso, desc: r[1], deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
+                    }
                 } else {
-                    render();
+                    data.forEach(r => {
+                        let iso = "", desc = "", deb = 0, cre = 0;
+                        if (bank === 'BSI') {
+                            iso = (r['Date'] || "").split(' ')[0];
+                            desc = r['Description'];
+                            let amt = cleanAmt(r['Amount']);
+                            if (r['DB'] === 'DB') deb = amt; else cre = amt;
+                        } 
+                        else if (bank === 'MAYBANK') {
+                            let p = (r['Posting Date'] || "").split('-');
+                            if (p.length === 3) iso = `${p[2]}-${monthsMap[p[1]]}-${p[0].padStart(2, '0')}`;
+                            desc = r['Transaction Description'];
+                            deb = cleanAmt(r['Debit']);
+                            cre = cleanAmt(r['Credit']);
+                        }
+                        else if (bank === 'BRI') {
+                            iso = (r['TGL_TRAN'] || "").split(' ')[0];
+                            desc = r['DESK_TRAN'];
+                            deb = cleanAmt(r['MUTASI_DEBET']);
+                            cre = cleanAmt(r['MUTASI_KREDIT']);
+                        }
+                        else if (bank === 'MANDIRI') {
+                            let p = (r['PostDate'] || "").split(' ');
+                            if (p.length === 3) iso = `${p[2]}-${monthsMap[p[1]] || '01'}-${p[0].padStart(2, '0')}`;
+                            desc = r['Remarks'] + " " + (r['AdditionalDesc'] || "");
+                            deb = cleanAmt(r['Debit Amount']);
+                            cre = cleanAmt(r['Credit Amount']);
+                        }
+                        else if (bank === 'BNI') {
+                            let p = (r['Value Date'] || "").substring(0,8).split('/');
+                            if(p.length === 3) iso = `20${p[2]}-${p[1]}-${p[0]}`;
+                            desc = r['Description'];
+                            deb = cleanAmt(r['Debit']);
+                            cre = cleanAmt(r['Credit']);
+                        }
+                        if (iso) db.push({ iso, desc, deb, cre });
+                    });
                 }
+                render();
             }
         });
     });
