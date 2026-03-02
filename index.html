@@ -90,11 +90,11 @@
     <div class="summary-grid">
         <div class="card debit-card">
             <small>TOTAL DEBIT (KELUAR)</small>
-            <div id="dispDebit" class="val">0.00</div>
+            <div id="dispDebit" class="val">0,00</div>
         </div>
         <div class="card credit-card">
             <small>TOTAL CREDIT (MASUK)</small>
-            <div id="dispCredit" class="val">0.00</div>
+            <div id="dispCredit" class="val">0,00</div>
         </div>
     </div>
 
@@ -138,19 +138,29 @@
     function convertToISO(dateStr, bank) {
         if (!dateStr) return "";
         try {
+            dateStr = dateStr.trim();
             if (bank === 'BNI') {
                 const p = dateStr.split('/');
                 return `20${p[2].substring(0,2)}-${p[1]}-${p[0]}`;
             } else if (bank === 'MANDIRI') {
                 const months = {'January':'01','February':'02','March':'03','April':'04','May':'05','June':'06','July':'07','August':'08','September':'09','October':'10','November':'11','December':'12'};
-                const parts = dateStr.trim().split(' ');
+                const parts = dateStr.split(' ');
                 return `${parts[2]}-${months[parts[1]]}-${parts[0].padStart(2, '0')}`;
             } else if (bank === 'BRI') {
-                return dateStr.trim().split(' ')[0];
+                return dateStr.split(' ')[0];
             } else {
-                const monthsShort = {'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06','Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'};
+                // BCA Handling
+                if (dateStr.includes('/')) {
+                    const p = dateStr.split('/');
+                    return `${YEAR_DEFAULT}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+                }
+                const monthsShort = {
+                    'JAN':'01','FEB':'02','MAR':'03','APR':'04','MAY':'05','JUN':'06','JUL':'07','AUG':'08','SEP':'09','OCT':'10','NOV':'11','DEC':'12',
+                    'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06','Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'
+                };
                 const p = dateStr.split('-');
-                return `${YEAR_DEFAULT}-${monthsShort[p[1]]}-${p[0].padStart(2, '0')}`;
+                const m = monthsShort[p[1]] || monthsShort[p[1]?.toUpperCase()] || '01';
+                return `${YEAR_DEFAULT}-${m}-${p[0].padStart(2, '0')}`;
             }
         } catch(e) { return ""; }
     }
@@ -163,6 +173,7 @@
 
     function cleanAmt(val) {
         if (!val) return 0;
+        // Hapus koma sebagai ribuan, pertahankan titik sebagai desimal
         let res = val.toString().replace(/,/g, '').replace(/"/g, '');
         return parseFloat(res) || 0;
     }
@@ -181,7 +192,7 @@
 
         document.getElementById('infoRekPanel').style.display = 'none';
 
-        // Deteksi berdasarkan nama file (Mandiri, BRI, BNI)
+        // Deteksi rekening berdasarkan nama file (untuk bank selain BCA)
         if (bank !== 'BCA') {
             const found = ACCOUNT_MAP.find(item => file.name.includes(item.acc));
             if (found) updateInfoDisplay(found.bank, found.acc);
@@ -191,13 +202,12 @@
             header: bank !== 'BCA', 
             skipEmptyLines: true,
             quoteChar: '"',
-            delimiter: (bank === 'BCA' || bank === 'MANDIRI') ? ";" : ",",
             complete: (results) => {
                 const data = results.data;
                 db = [];
                 
                 if (bank === 'BCA') {
-                    // Treatment Khusus BCA: Scan Baris untuk No Rekening
+                    // Cari baris No Rekening
                     const accRow = data.find(r => r[0] && r[0].includes("No. rekening"));
                     if (accRow) {
                         const rawAcc = accRow[0].split(":")[1].trim();
@@ -207,10 +217,20 @@
                     let start = data.findIndex(r => r[0] && r[0].includes("Tanggal Transaksi")) + 1;
                     for (let i = start; i < data.length; i++) {
                         let r = data[i];
-                        if (!r[0] || r[0].includes("Saldo")) continue;
-                        let amt = cleanAmt(r[3]);
-                        let isCr = r[5] === "CR" || (r[4] && r[4].includes("CR"));
-                        db.push({ isoDate: convertToISO(r[0].trim(), 'BCA'), desc: r[1], deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
+                        // Skip baris kosong atau baris summary di bawah
+                        if (!r[0] || r[0].includes("Saldo") || r[0].includes("Mutasi")) continue;
+                        
+                        // Pada CSV BCA Corporate: r[3] berisi nominal + status (misal "1,500.00 CR")
+                        let amtStr = (r[3] || "").toString();
+                        let amt = cleanAmt(amtStr);
+                        let isCr = amtStr.toUpperCase().includes("CR");
+                        
+                        db.push({ 
+                            isoDate: convertToISO(r[0], 'BCA'), 
+                            desc: r[1], 
+                            deb: isCr ? 0 : amt, 
+                            cre: isCr ? amt : 0 
+                        });
                     }
                 } else if (bank === 'MANDIRI') {
                     db = data.map(r => ({ isoDate: convertToISO(r['PostDate'], 'MANDIRI'), desc: r['Remarks'] + " " + (r['AdditionalDesc'] || ""), deb: cleanAmt(r['Debit Amount']), cre: cleanAmt(r['Credit Amount']) }));
@@ -233,7 +253,7 @@
         let sD = 0; let sC = 0;
 
         const filtered = db.filter(i => {
-            const matchesSearch = i.desc.toLowerCase().includes(search);
+            const matchesSearch = (i.desc || "").toLowerCase().includes(search);
             let matchesDate = true;
             if (i.isoDate) {
                 if (startFilter !== "" && i.isoDate < startFilter) matchesDate = false;
@@ -245,12 +265,17 @@
         filtered.forEach(i => {
             sD += i.deb; sC += i.cre;
             const tr = document.createElement('tr');
-            tr.innerHTML = `<td class="date-col">${formatDisplayDate(i.isoDate)}</td><td style="font-size:11px">${i.desc}</td><td class="num-col txt-red">${i.deb > 0 ? i.deb.toFixed(2) : '0.00'}</td><td class="num-col txt-green">${i.cre > 0 ? i.cre.toFixed(2) : '0.00'}</td>`;
+            tr.innerHTML = `
+                <td class="date-col">${formatDisplayDate(i.isoDate)}</td>
+                <td style="font-size:11px">${i.desc}</td>
+                <td class="num-col txt-red">${i.deb > 0 ? i.deb.toLocaleString('id-ID', {minimumFractionDigits: 2}) : '0,00'}</td>
+                <td class="num-col txt-green">${i.cre > 0 ? i.cre.toLocaleString('id-ID', {minimumFractionDigits: 2}) : '0,00'}</td>
+            `;
             body.appendChild(tr);
         });
 
-        document.getElementById('dispDebit').innerText = sD.toLocaleString('en-US',{minimumFractionDigits:2});
-        document.getElementById('dispCredit').innerText = sC.toLocaleString('en-US',{minimumFractionDigits:2});
+        document.getElementById('dispDebit').innerText = sD.toLocaleString('id-ID', {minimumFractionDigits: 2});
+        document.getElementById('dispCredit').innerText = sC.toLocaleString('id-ID', {minimumFractionDigits: 2});
     }
 
     document.getElementById('searchTerm').addEventListener('input', render);
@@ -258,5 +283,4 @@
     document.getElementById('endDate').addEventListener('change', render);
 </script>
 </body>
-
 </html>
