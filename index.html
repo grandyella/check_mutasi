@@ -12,18 +12,29 @@
         .row { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 10px; }
         .input-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 150px; }
         select, input { padding: 10px; border: 1px solid #bec8d0; border-radius: 6px; font-size: 14px; }
+        
+        /* Button Styles */
+        .btn-group { display: flex; gap: 10px; }
+        .btn { padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.3s; font-size: 13px; display: flex; align-items: center; gap: 5px; }
+        .btn-copy { background: #3498db; color: white; }
+        .btn-copy:hover { background: #2980b9; }
+        .btn-reset { background: #95a5a6; color: white; }
+        .btn-reset:hover { background: #7f8c8d; }
+
         .info-rekening { background: #2c3e50; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none; border-left: 5px solid #f1c40f; }
         .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
         .card { padding: 15px; border-radius: 8px; color: white; }
         .debit-card { background: #e74c3c; }
         .credit-card { background: #27ae60; }
         .val { font-size: 1.5rem; font-weight: bold; font-family: 'Consolas', monospace; }
+        
         table { width: 100%; border-collapse: collapse; background: white; margin-top: 10px; }
         th { background: #2c3e50; color: white; padding: 12px; text-align: left; font-size: 14px; position: sticky; top: 0; }
         td { padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; }
         .num-col { text-align: right; font-family: 'Courier New', monospace; font-weight: bold; }
         .txt-red { color: #e74c3c; }
         .txt-green { color: #27ae60; }
+        
         footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; border-top: 1px solid #eee; }
         .heart { color: #e74c3c; }
     </style>
@@ -51,11 +62,15 @@
                 <label><strong>2. Upload CSV:</strong></label>
                 <input type="file" id="csvFile" accept=".csv">
             </div>
+            <div class="btn-group">
+                <button class="btn btn-copy" onclick="copyTable()">📋 Salin Data</button>
+                <button class="btn btn-reset" onclick="resetPage()">🔄 Reset</button>
+            </div>
         </div>
         <div class="row">
             <div class="input-group"><label>Dari Tanggal:</label><input type="date" id="startDate"></div>
             <div class="input-group"><label>Sampai Tanggal:</label><input type="date" id="endDate"></div>
-            <div class="input-group"><label>Cari Keterangan:</label><input type="text" id="searchTerm" placeholder="Cari teks di keterangan..."></div>
+            <div class="input-group"><label>Cari Keterangan:</label><input type="text" id="searchTerm" placeholder="Cari teks..."></div>
         </div>
     </div>
 
@@ -65,11 +80,11 @@
     </div>
 
     <div class="summary-grid">
-        <div class="card debit-card"><small>TOTAL DEBIT (KELUAR)</small><div id="dispDebit" class="val">0,00</div></div>
-        <div class="card credit-card"><small>TOTAL CREDIT (MASUK)</small><div id="dispCredit" class="val">0,00</div></div>
+        <div class="card debit-card"><small>TOTAL DEBIT (KELUAR)</small><div id="dispDebit" class="val">0.00</div></div>
+        <div class="card credit-card"><small>TOTAL CREDIT (MASUK)</small><div id="dispCredit" class="val">0.00</div></div>
     </div>
 
-    <table>
+    <table id="mutasiTable">
         <thead><tr><th>Tanggal</th><th>Keterangan</th><th>Debit</th><th>Credit</th></tr></thead>
         <tbody id="tableData"><tr><td colspan="4" style="text-align:center; padding:40px; color:#999;">Pilih bank & upload file CSV.</td></tr></tbody>
     </table>
@@ -80,15 +95,16 @@
 <script>
     let db = [];
     const YEAR_DEFAULT = "2026";
-    const monthsMap = {
-        'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
-        'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
-    };
+    const monthsMap = {'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06','Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'};
 
     function showInfo(bank, acc) {
         document.getElementById('dispBankName').innerText = "BANK " + bank;
         document.getElementById('dispAccNo').innerText = "No. Rekening: " + (acc || "-");
         document.getElementById('infoRekPanel').style.display = 'block';
+    }
+
+    function formatNumber(num) {
+        return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     function cleanAmt(val) {
@@ -97,21 +113,26 @@
         return parseFloat(s) || 0;
     }
 
-    function formatIDR(num) {
-        return num.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    function resetPage() {
+        document.getElementById('csvFile').value = "";
+        document.getElementById('bankSource').value = "";
+        document.getElementById('startDate').value = "";
+        document.getElementById('endDate').value = "";
+        document.getElementById('searchTerm').value = "";
+        document.getElementById('infoRekPanel').style.display = 'none';
+        document.getElementById('dispDebit').innerText = "0.00";
+        document.getElementById('dispCredit').innerText = "0.00";
+        document.getElementById('tableData').innerHTML = '<tr><td colspan="4" style="text-align:center; padding:40px; color:#999;">Pilih bank & upload file CSV.</td></tr>';
+        db = [];
     }
 
     document.getElementById('csvFile').addEventListener('change', function(e) {
         const file = e.target.files[0];
         const bank = document.getElementById('bankSource').value;
-        if (!bank) return alert("Pilih bank dulu!");
+        if (!bank || !file) return;
 
-        // Deteksi No Rekening dari nama file untuk BSI/Maybank/BNI/Mandiri/BRI
-        const fileName = file.name;
-        const matchAcc = fileName.match(/\d{10,}/); // Mencari angka 10 digit atau lebih
-        if (matchAcc && bank !== 'BCA') {
-            showInfo(bank, matchAcc[0]);
-        }
+        const matchAcc = file.name.match(/\d{10,}/);
+        if (matchAcc && bank !== 'BCA') showInfo(bank, matchAcc[0]);
 
         Papa.parse(file, {
             header: bank !== 'BCA',
@@ -119,21 +140,15 @@
             complete: (results) => {
                 db = [];
                 const data = results.data;
-
                 if (bank === 'BCA') {
                     const accRow = data.find(r => r[0] && r[0].includes("No. rekening"));
-                    if (accRow) {
-                        const accNo = accRow[0].split(":")[1].trim();
-                        showInfo("BCA", accNo);
-                    }
+                    if (accRow) showInfo("BCA", accRow[0].split(":")[1].trim());
                     let start = data.findIndex(r => r[0] && r[0].includes("Tanggal Transaksi")) + 1;
                     for (let i = start; i < data.length; i++) {
-                        let r = data[i];
-                        if (!r[0] || r[0].includes("Saldo") || r[0].includes("Mutasi")) continue;
+                        let r = data[i]; if (!r[0] || r[0].includes("Saldo") || r[0].includes("Mutasi")) continue;
                         let p = r[0].split('/');
                         let iso = `${YEAR_DEFAULT}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
-                        let amtStr = (r[3] || "");
-                        let amt = cleanAmt(amtStr);
+                        let amtStr = (r[3] || ""); let amt = cleanAmt(amtStr);
                         let isCr = amtStr.toUpperCase().includes("CR");
                         db.push({ iso, desc: r[1], deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
                     }
@@ -141,38 +156,24 @@
                     data.forEach(r => {
                         let iso = "", desc = "", deb = 0, cre = 0;
                         if (bank === 'BSI') {
-                            iso = (r['Date'] || "").split(' ')[0];
-                            desc = r['Description'];
-                            let amt = cleanAmt(r['Amount']);
-                            if (r['DB'] === 'DB') deb = amt; else cre = amt;
-                        } 
-                        else if (bank === 'MAYBANK') {
+                            iso = (r['Date'] || "").split(' ')[0]; desc = r['Description'];
+                            let amt = cleanAmt(r['Amount']); if (r['DB'] === 'DB') deb = amt; else cre = amt;
+                        } else if (bank === 'MAYBANK') {
                             let p = (r['Posting Date'] || "").split('-');
                             if (p.length === 3) iso = `${p[2]}-${monthsMap[p[1]] || '01'}-${p[0].padStart(2, '0')}`;
-                            desc = r['Transaction Description'];
-                            deb = cleanAmt(r['Debit']);
-                            cre = cleanAmt(r['Credit']);
-                        }
-                        else if (bank === 'BRI') {
-                            iso = (r['TGL_TRAN'] || "").split(' ')[0];
-                            desc = r['DESK_TRAN'];
-                            deb = cleanAmt(r['MUTASI_DEBET']);
-                            cre = cleanAmt(r['MUTASI_KREDIT']);
-                        }
-                        else if (bank === 'MANDIRI') {
+                            desc = r['Transaction Description']; deb = cleanAmt(r['Debit']); cre = cleanAmt(r['Credit']);
+                        } else if (bank === 'BRI') {
+                            iso = (r['TGL_TRAN'] || "").split(' ')[0]; desc = r['DESK_TRAN'];
+                            deb = cleanAmt(r['MUTASI_DEBET']); cre = cleanAmt(r['MUTASI_KREDIT']);
+                        } else if (bank === 'MANDIRI') {
                             let p = (r['PostDate'] || "").split(' ');
                             if (p.length === 3) iso = `${p[2]}-${monthsMap[p[1]] || '01'}-${p[0].padStart(2, '0')}`;
                             desc = r['Remarks'] + " " + (r['AdditionalDesc'] || "");
-                            deb = cleanAmt(r['Debit Amount']);
-                            cre = cleanAmt(r['Credit Amount']);
-                        }
-                        else if (bank === 'BNI') {
-                            let valDate = r['Value Date'] || "";
-                            let p = valDate.substring(0,8).split('/');
+                            deb = cleanAmt(r['Debit Amount']); cre = cleanAmt(r['Credit Amount']);
+                        } else if (bank === 'BNI') {
+                            let p = (r['Value Date'] || "").substring(0,8).split('/');
                             if(p.length === 3) iso = `20${p[2]}-${p[1]}-${p[0]}`;
-                            desc = r['Description'];
-                            deb = cleanAmt(r['Debit']);
-                            cre = cleanAmt(r['Credit']);
+                            desc = r['Description']; deb = cleanAmt(r['Debit']); cre = cleanAmt(r['Credit']);
                         }
                         if (iso) db.push({ iso, desc, deb, cre });
                     });
@@ -197,14 +198,27 @@
             html += `<tr>
                 <td>${i.iso.split('-').reverse().join('/')}</td>
                 <td style="font-size:11px">${i.desc}</td>
-                <td class="num-col txt-red">${i.deb > 0 ? formatIDR(i.deb) : '0,00'}</td>
-                <td class="num-col txt-green">${i.cre > 0 ? formatIDR(i.cre) : '0,00'}</td>
+                <td class="num-col txt-red">${i.deb > 0 ? formatNumber(i.deb) : '0.00'}</td>
+                <td class="num-col txt-green">${i.cre > 0 ? formatNumber(i.cre) : '0.00'}</td>
             </tr>`;
         });
 
         document.getElementById('tableData').innerHTML = html || '<tr><td colspan="4" style="text-align:center">Data tidak ditemukan</td></tr>';
-        document.getElementById('dispDebit').innerText = formatIDR(sD);
-        document.getElementById('dispCredit').innerText = formatIDR(sC);
+        document.getElementById('dispDebit').innerText = formatNumber(sD);
+        document.getElementById('dispCredit').innerText = formatNumber(sC);
+    }
+
+    function copyTable() {
+        const rows = document.querySelectorAll("#mutasiTable tr");
+        if (rows.length <= 1) return alert("Tidak ada data untuk disalin.");
+        let content = "";
+        rows.forEach(row => {
+            const cols = row.querySelectorAll("td, th");
+            let rowData = [];
+            cols.forEach(col => rowData.push(col.innerText));
+            content += rowData.join("\t") + "\n";
+        });
+        navigator.clipboard.writeText(content).then(() => alert("Data berhasil disalin!"));
     }
 
     ['searchTerm', 'startDate', 'endDate'].forEach(id => document.getElementById(id).addEventListener('input', render));
