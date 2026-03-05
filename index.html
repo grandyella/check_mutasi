@@ -13,7 +13,6 @@
         .input-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 150px; }
         select, input { padding: 10px; border: 1px solid #bec8d0; border-radius: 6px; font-size: 14px; }
         
-        /* Button Styles */
         .btn-group { display: flex; gap: 10px; }
         .btn { padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.3s; font-size: 13px; display: flex; align-items: center; gap: 5px; }
         .btn-copy { background: #3498db; color: white; }
@@ -94,8 +93,31 @@
 
 <script>
     let db = [];
-    const YEAR_DEFAULT = "2026";
+    const currentYear = new Date().getFullYear();
     const monthsMap = {'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06','Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'};
+
+    // Fungsi utama pendeteksi tanggal dinamis
+    function parseDynamicDate(dateStr) {
+        if (!dateStr) return "";
+        let cleanDate = dateStr.toString().trim().split(' ')[0]; 
+        let parts = cleanDate.split(/[-/]/);
+        
+        // YYYY-MM-DD
+        if (parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
+        
+        // DD-MMM-YYYY (Contoh Maybank: 02-Feb-2026)
+        if (isNaN(parts[1])) {
+            let m = monthsMap[parts[1]] || "01";
+            let y = parts[2] || currentYear;
+            return `${y}-${m}-${parts[0].padStart(2,'0')}`;
+        }
+
+        // DD/MM/YYYY atau DD/MM
+        let d = parts[0].padStart(2,'0');
+        let m = parts[1].padStart(2,'0');
+        let y = parts[2] ? (parts[2].length === 2 ? "20" + parts[2] : parts[2]) : currentYear;
+        return `${y}-${m}-${d}`;
+    }
 
     function showInfo(bank, acc) {
         document.getElementById('dispBankName').innerText = "BANK " + bank;
@@ -131,49 +153,60 @@
         const bank = document.getElementById('bankSource').value;
         if (!bank || !file) return;
 
-        const matchAcc = file.name.match(/\d{10,}/);
-        if (matchAcc && bank !== 'BCA') showInfo(bank, matchAcc[0]);
-
         Papa.parse(file, {
             header: bank !== 'BCA',
             skipEmptyLines: true,
             complete: (results) => {
                 db = [];
                 const data = results.data;
+                
                 if (bank === 'BCA') {
                     const accRow = data.find(r => r[0] && r[0].includes("No. rekening"));
                     if (accRow) showInfo("BCA", accRow[0].split(":")[1].trim());
+
                     let start = data.findIndex(r => r[0] && r[0].includes("Tanggal Transaksi")) + 1;
                     for (let i = start; i < data.length; i++) {
-                        let r = data[i]; if (!r[0] || r[0].includes("Saldo") || r[0].includes("Mutasi")) continue;
-                        let p = r[0].split('/');
-                        let iso = `${YEAR_DEFAULT}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
-                        let amtStr = (r[3] || ""); let amt = cleanAmt(amtStr);
+                        let r = data[i]; 
+                        if (!r[0] || r[0].includes("Saldo") || r[0].includes("Mutasi")) continue;
+                        
+                        let iso = parseDynamicDate(r[0]);
+                        let amtStr = (r[3] || ""); 
+                        let amt = cleanAmt(amtStr);
                         let isCr = amtStr.toUpperCase().includes("CR");
-                        db.push({ iso, desc: r[1], deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
+                        if (iso) db.push({ iso, desc: r[1], deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
                     }
                 } else {
+                    // Deteksi No Rekening dari nama file untuk bank non-BCA
+                    const matchAcc = file.name.match(/\d{10,}/);
+                    if (matchAcc) showInfo(bank, matchAcc[0]);
+
                     data.forEach(r => {
                         let iso = "", desc = "", deb = 0, cre = 0;
                         if (bank === 'BSI') {
-                            iso = (r['Date'] || "").split(' ')[0]; desc = r['Description'];
-                            let amt = cleanAmt(r['Amount']); if (r['DB'] === 'DB') deb = amt; else cre = amt;
+                            iso = parseDynamicDate(r['Date']);
+                            desc = r['Description'];
+                            let amt = cleanAmt(r['Amount']); 
+                            if (r['DB'] === 'DB') deb = amt; else cre = amt;
                         } else if (bank === 'MAYBANK') {
-                            let p = (r['Posting Date'] || "").split('-');
-                            if (p.length === 3) iso = `${p[2]}-${monthsMap[p[1]] || '01'}-${p[0].padStart(2, '0')}`;
-                            desc = r['Transaction Description']; deb = cleanAmt(r['Debit']); cre = cleanAmt(r['Credit']);
+                            iso = parseDynamicDate(r['Posting Date']);
+                            desc = r['Transaction Description']; 
+                            deb = cleanAmt(r['Debit']); 
+                            cre = cleanAmt(r['Credit']);
                         } else if (bank === 'BRI') {
-                            iso = (r['TGL_TRAN'] || "").split(' ')[0]; desc = r['DESK_TRAN'];
-                            deb = cleanAmt(r['MUTASI_DEBET']); cre = cleanAmt(r['MUTASI_KREDIT']);
+                            iso = parseDynamicDate(r['TGL_TRAN']);
+                            desc = r['DESK_TRAN'];
+                            deb = cleanAmt(r['MUTASI_DEBET']); 
+                            cre = cleanAmt(r['MUTASI_KREDIT']);
                         } else if (bank === 'MANDIRI') {
-                            let p = (r['PostDate'] || "").split(' ');
-                            if (p.length === 3) iso = `${p[2]}-${monthsMap[p[1]] || '01'}-${p[0].padStart(2, '0')}`;
+                            iso = parseDynamicDate(r['PostDate']);
                             desc = r['Remarks'] + " " + (r['AdditionalDesc'] || "");
-                            deb = cleanAmt(r['Debit Amount']); cre = cleanAmt(r['Credit Amount']);
+                            deb = cleanAmt(r['Debit Amount']); 
+                            cre = cleanAmt(r['Credit Amount']);
                         } else if (bank === 'BNI') {
-                            let p = (r['Value Date'] || "").substring(0,8).split('/');
-                            if(p.length === 3) iso = `20${p[2]}-${p[1]}-${p[0]}`;
-                            desc = r['Description']; deb = cleanAmt(r['Debit']); cre = cleanAmt(r['Credit']);
+                            iso = parseDynamicDate(r['Value Date'] ? r['Value Date'].substring(0,8) : "");
+                            desc = r['Description'];
+                            deb = cleanAmt(r['Debit']);
+                            cre = cleanAmt(r['Credit']);
                         }
                         if (iso) db.push({ iso, desc, deb, cre });
                     });
@@ -189,11 +222,14 @@
         const end = document.getElementById('endDate').value;
         let sD = 0, sC = 0, html = '';
 
-        db.filter(i => {
+        // Urutkan data berdasarkan tanggal (paling lama ke baru)
+        const filtered = db.filter(i => {
             const mS = (i.desc || "").toLowerCase().includes(term);
             const mD = (!start || i.iso >= start) && (!end || i.iso <= end);
             return mS && mD;
-        }).forEach(i => {
+        }).sort((a,b) => new Date(a.iso) - new Date(b.iso));
+
+        filtered.forEach(i => {
             sD += i.deb; sC += i.cre;
             html += `<tr>
                 <td>${i.iso.split('-').reverse().join('/')}</td>
@@ -203,7 +239,7 @@
             </tr>`;
         });
 
-        document.getElementById('tableData').innerHTML = html || '<tr><td colspan="4" style="text-align:center">Data tidak ditemukan</td></tr>';
+        document.getElementById('tableData').innerHTML = html || '<tr><td colspan="4" style="text-align:center; padding:20px; color:#999;">Data tidak ditemukan</td></tr>';
         document.getElementById('dispDebit').innerText = formatNumber(sD);
         document.getElementById('dispCredit').innerText = formatNumber(sC);
     }
@@ -218,7 +254,7 @@
             cols.forEach(col => rowData.push(col.innerText));
             content += rowData.join("\t") + "\n";
         });
-        navigator.clipboard.writeText(content).then(() => alert("Data berhasil disalin!"));
+        navigator.clipboard.writeText(content).then(() => alert("Data berhasil disalin ke clipboard!"));
     }
 
     ['searchTerm', 'startDate', 'endDate'].forEach(id => document.getElementById(id).addEventListener('input', render));
