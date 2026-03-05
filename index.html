@@ -12,28 +12,22 @@
         .row { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 10px; }
         .input-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 150px; }
         select, input { padding: 10px; border: 1px solid #bec8d0; border-radius: 6px; font-size: 14px; }
-        
         .btn-group { display: flex; gap: 10px; }
         .btn { padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.3s; font-size: 13px; display: flex; align-items: center; gap: 5px; }
         .btn-copy { background: #3498db; color: white; }
-        .btn-copy:hover { background: #2980b9; }
         .btn-reset { background: #95a5a6; color: white; }
-        .btn-reset:hover { background: #7f8c8d; }
-
         .info-rekening { background: #2c3e50; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none; border-left: 5px solid #f1c40f; }
         .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
         .card { padding: 15px; border-radius: 8px; color: white; }
         .debit-card { background: #e74c3c; }
         .credit-card { background: #27ae60; }
         .val { font-size: 1.5rem; font-weight: bold; font-family: 'Consolas', monospace; }
-        
         table { width: 100%; border-collapse: collapse; background: white; margin-top: 10px; }
         th { background: #2c3e50; color: white; padding: 12px; text-align: left; font-size: 14px; position: sticky; top: 0; }
         td { padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; }
         .num-col { text-align: right; font-family: 'Courier New', monospace; font-weight: bold; }
         .txt-red { color: #e74c3c; }
         .txt-green { color: #27ae60; }
-        
         footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; border-top: 1px solid #eee; }
         .heart { color: #e74c3c; }
     </style>
@@ -96,23 +90,16 @@
     const currentYear = new Date().getFullYear();
     const monthsMap = {'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06','Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'};
 
-    // Fungsi utama pendeteksi tanggal dinamis
     function parseDynamicDate(dateStr) {
         if (!dateStr) return "";
         let cleanDate = dateStr.toString().trim().split(' ')[0]; 
         let parts = cleanDate.split(/[-/]/);
-        
-        // YYYY-MM-DD
         if (parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
-        
-        // DD-MMM-YYYY (Contoh Maybank: 02-Feb-2026)
         if (isNaN(parts[1])) {
             let m = monthsMap[parts[1]] || "01";
             let y = parts[2] || currentYear;
             return `${y}-${m}-${parts[0].padStart(2,'0')}`;
         }
-
-        // DD/MM/YYYY atau DD/MM
         let d = parts[0].padStart(2,'0');
         let m = parts[1].padStart(2,'0');
         let y = parts[2] ? (parts[2].length === 2 ? "20" + parts[2] : parts[2]) : currentYear;
@@ -130,8 +117,9 @@
     }
 
     function cleanAmt(val) {
-        if (!val || val === ".00" || val === "" || val === "-") return 0;
-        let s = val.toString().replace(/,/g, '').replace(/"/g, '').trim();
+        if (!val) return 0;
+        // Hapus " DB", " CR", spasi, dan koma ribuan
+        let s = val.toString().replace(/CR|DB/gi, '').replace(/,/g, '').replace(/"/g, '').trim();
         return parseFloat(s) || 0;
     }
 
@@ -154,62 +142,77 @@
         if (!bank || !file) return;
 
         Papa.parse(file, {
-            header: bank !== 'BCA',
+            header: false, // Set false agar kita handle manual pencarian header
             skipEmptyLines: true,
             complete: (results) => {
                 db = [];
                 const data = results.data;
                 
                 if (bank === 'BCA') {
-                    const accRow = data.find(r => r[0] && r[0].includes("No. rekening"));
+                    const accRow = data.find(r => r[0] && r[0].toLowerCase().includes("no. rekening"));
                     if (accRow) showInfo("BCA", accRow[0].split(":")[1].trim());
 
-                    let start = data.findIndex(r => r[0] && r[0].includes("Tanggal Transaksi")) + 1;
-                    for (let i = start; i < data.length; i++) {
-                        let r = data[i]; 
-                        if (!r[0] || r[0].includes("Saldo") || r[0].includes("Mutasi")) continue;
-                        
-                        let iso = parseDynamicDate(r[0]);
-                        let amtStr = (r[3] || ""); 
-                        let amt = cleanAmt(amtStr);
-                        let isCr = amtStr.toUpperCase().includes("CR");
-                        if (iso) db.push({ iso, desc: r[1], deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
+                    // Cari baris mulai (Cek Tanggal Transaksi)
+                    let startIndex = -1;
+                    for(let i=0; i<data.length; i++) {
+                        if(data[i][0] && data[i][0].toLowerCase().includes("tanggal transaksi")) {
+                            startIndex = i + 1;
+                            break;
+                        }
+                    }
+
+                    if(startIndex !== -1) {
+                        for (let i = startIndex; i < data.length; i++) {
+                            let r = data[i]; 
+                            if (!r[0] || r[0].toLowerCase().includes("saldo") || r[0].toLowerCase().includes("mutasi")) continue;
+                            
+                            let iso = parseDynamicDate(r[0]);
+                            let amtStr = (r[3] || "").toUpperCase(); 
+                            let amt = cleanAmt(amtStr);
+                            let isCr = amtStr.includes("CR");
+                            if (iso) db.push({ iso, desc: r[1], deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
+                        }
                     }
                 } else {
-                    // Deteksi No Rekening dari nama file untuk bank non-BCA
+                    // Logic Bank Lainnya menggunakan Header detection
+                    const headers = data[0];
                     const matchAcc = file.name.match(/\d{10,}/);
                     if (matchAcc) showInfo(bank, matchAcc[0]);
 
-                    data.forEach(r => {
+                    for(let i=1; i < data.length; i++) {
+                        let r = data[i];
+                        let rowObj = {};
+                        headers.forEach((h, idx) => rowObj[h.trim()] = r[idx]);
+
                         let iso = "", desc = "", deb = 0, cre = 0;
                         if (bank === 'BSI') {
-                            iso = parseDynamicDate(r['Date']);
-                            desc = r['Description'];
-                            let amt = cleanAmt(r['Amount']); 
-                            if (r['DB'] === 'DB') deb = amt; else cre = amt;
+                            iso = parseDynamicDate(rowObj['Date']);
+                            desc = rowObj['Description'];
+                            let amt = cleanAmt(rowObj['Amount']); 
+                            if (rowObj['DB'] === 'DB') deb = amt; else cre = amt;
                         } else if (bank === 'MAYBANK') {
-                            iso = parseDynamicDate(r['Posting Date']);
-                            desc = r['Transaction Description']; 
-                            deb = cleanAmt(r['Debit']); 
-                            cre = cleanAmt(r['Credit']);
+                            iso = parseDynamicDate(rowObj['Posting Date']);
+                            desc = rowObj['Transaction Description']; 
+                            deb = cleanAmt(rowObj['Debit']); 
+                            cre = cleanAmt(rowObj['Credit']);
                         } else if (bank === 'BRI') {
-                            iso = parseDynamicDate(r['TGL_TRAN']);
-                            desc = r['DESK_TRAN'];
-                            deb = cleanAmt(r['MUTASI_DEBET']); 
-                            cre = cleanAmt(r['MUTASI_KREDIT']);
+                            iso = parseDynamicDate(rowObj['TGL_TRAN']);
+                            desc = rowObj['DESK_TRAN'];
+                            deb = cleanAmt(rowObj['MUTASI_DEBET']); 
+                            cre = cleanAmt(rowObj['MUTASI_KREDIT']);
                         } else if (bank === 'MANDIRI') {
-                            iso = parseDynamicDate(r['PostDate']);
-                            desc = r['Remarks'] + " " + (r['AdditionalDesc'] || "");
-                            deb = cleanAmt(r['Debit Amount']); 
-                            cre = cleanAmt(r['Credit Amount']);
+                            iso = parseDynamicDate(rowObj['PostDate']);
+                            desc = (rowObj['Remarks'] || "") + " " + (rowObj['AdditionalDesc'] || "");
+                            deb = cleanAmt(rowObj['Debit Amount']); 
+                            cre = cleanAmt(rowObj['Credit Amount']);
                         } else if (bank === 'BNI') {
-                            iso = parseDynamicDate(r['Value Date'] ? r['Value Date'].substring(0,8) : "");
-                            desc = r['Description'];
-                            deb = cleanAmt(r['Debit']);
-                            cre = cleanAmt(r['Credit']);
+                            iso = parseDynamicDate(rowObj['Value Date'] ? rowObj['Value Date'].substring(0,8) : "");
+                            desc = rowObj['Description'];
+                            deb = cleanAmt(rowObj['Debit']);
+                            cre = cleanAmt(rowObj['Credit']);
                         }
                         if (iso) db.push({ iso, desc, deb, cre });
-                    });
+                    }
                 }
                 render();
             }
@@ -222,7 +225,6 @@
         const end = document.getElementById('endDate').value;
         let sD = 0, sC = 0, html = '';
 
-        // Urutkan data berdasarkan tanggal (paling lama ke baru)
         const filtered = db.filter(i => {
             const mS = (i.desc || "").toLowerCase().includes(term);
             const mD = (!start || i.iso >= start) && (!end || i.iso <= end);
@@ -239,7 +241,7 @@
             </tr>`;
         });
 
-        document.getElementById('tableData').innerHTML = html || '<tr><td colspan="4" style="text-align:center; padding:20px; color:#999;">Data tidak ditemukan</td></tr>';
+        document.getElementById('tableData').innerHTML = html || '<tr><td colspan="4" style="text-align:center; padding:20px; color:#999;">Data tidak ditemukan. Pastikan Bank dan File sesuai.</td></tr>';
         document.getElementById('dispDebit').innerText = formatNumber(sD);
         document.getElementById('dispCredit').innerText = formatNumber(sC);
     }
@@ -254,7 +256,7 @@
             cols.forEach(col => rowData.push(col.innerText));
             content += rowData.join("\t") + "\n";
         });
-        navigator.clipboard.writeText(content).then(() => alert("Data berhasil disalin ke clipboard!"));
+        navigator.clipboard.writeText(content).then(() => alert("Data berhasil disalin!"));
     }
 
     ['searchTerm', 'startDate', 'endDate'].forEach(id => document.getElementById(id).addEventListener('input', render));
