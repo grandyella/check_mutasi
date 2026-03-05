@@ -35,7 +35,7 @@
 <body>
 
 <div class="container">
-    <h2>📄 Convert Mutasi All Bank</h2>
+    <h2>📄 Convert Mutasi All Bank (Anti-PEND Version)</h2>
 
     <div class="config-panel">
         <div class="row">
@@ -87,19 +87,24 @@
 
 <script>
     let db = [];
-    const currentYear = new Date().getFullYear();
+    const todayISO = new Date().toISOString().split('T')[0];
 
     function parseDynamicDate(dateStr) {
-        if (!dateStr) return "";
-        let clean = dateStr.toString().trim().replace(/"/g, '');
+        if (!dateStr) return null;
+        let clean = dateStr.toString().trim().replace(/"/g, '').toUpperCase();
+        
+        // Cek jika PEND
+        if (clean.includes("PEND")) return { iso: todayISO, display: "PEND" };
+
         let parts = clean.split(/[-/]/);
-        if (parts.length < 2) return "";
+        if (parts.length < 2) return null;
         
         let d = parts[0].padStart(2, '0');
         let m = parts[1].padStart(2, '0');
-        let y = parts[2] ? (parts[2].length === 2 ? "20" + parts[2] : parts[2]) : currentYear;
+        let y = parts[2] ? (parts[2].length === 2 ? "20" + parts[2] : parts[2]) : new Date().getFullYear();
         
-        return `${y}-${m}-${d}`;
+        let iso = `${y}-${m}-${d}`;
+        return { iso: iso, display: `${d}/${m}/${y}` };
     }
 
     function cleanAmt(val) {
@@ -109,7 +114,7 @@
     }
 
     function resetPage() {
-        location.reload(); // Paling aman untuk reset total
+        location.reload();
     }
 
     document.getElementById('csvFile').addEventListener('change', function(e) {
@@ -124,9 +129,7 @@
                 db = [];
                 const data = results.data;
                 
-                // --- LOGIKA BCA KHUSUS ---
                 if (bank === 'BCA') {
-                    // Cari info rekening
                     const accRow = data.find(r => r[0] && r[0].toLowerCase().includes("no. rekening"));
                     if (accRow) {
                         document.getElementById('dispBankName').innerText = "BANK BCA";
@@ -134,9 +137,8 @@
                         document.getElementById('infoRekPanel').style.display = 'block';
                     }
 
-                    // Cari index kolom secara dinamis
                     let headerIdx = data.findIndex(r => r.some(c => c && c.toLowerCase().includes("tanggal transaksi")));
-                    if (headerIdx === -1) return alert("Format kolom tidak ditemukan!");
+                    if (headerIdx === -1) return alert("Header 'Tanggal Transaksi' tidak ditemukan!");
                     
                     let headers = data[headerIdx].map(h => h.toLowerCase().trim());
                     let tglCol = headers.findIndex(h => h.includes("tanggal"));
@@ -147,50 +149,38 @@
                         let r = data[i];
                         if (!r[tglCol] || r[tglCol].toLowerCase().includes("saldo") || r[tglCol].toLowerCase().includes("mutasi")) continue;
                         
-                        let iso = parseDynamicDate(r[tglCol]);
+                        let dateInfo = parseDynamicDate(r[tglCol]);
+                        if (!dateInfo) continue;
+
                         let amtStr = (r[jmlCol] || "").toUpperCase();
                         let amt = cleanAmt(amtStr);
                         let isCr = amtStr.includes("CR");
                         
-                        if (iso) db.push({ iso, desc: r[ketCol], deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
+                        db.push({ 
+                            iso: dateInfo.iso, 
+                            displayDate: dateInfo.display, 
+                            desc: r[ketCol], 
+                            deb: isCr ? 0 : amt, 
+                            cre: isCr ? amt : 0 
+                        });
                     }
                 } else {
-                    // --- LOGIKA BANK LAIN (BSI, MANDIRI, DLL) ---
-                    // Mengambil baris pertama sebagai header
+                    // Logic bank lain (BSI, Mandiri, BRI, dll)
                     let headers = data[0].map(h => h.trim());
                     for (let i = 1; i < data.length; i++) {
                         let r = data[i];
                         let rowObj = {};
                         headers.forEach((h, idx) => rowObj[h] = r[idx]);
 
-                        let iso = "", desc = "", deb = 0, cre = 0;
-                        if (bank === 'BSI') {
-                            iso = parseDynamicDate(rowObj['Date']);
-                            desc = rowObj['Description'];
-                            let amt = cleanAmt(rowObj['Amount']);
-                            if (rowObj['DB'] === 'DB') deb = amt; else cre = amt;
-                        } else if (bank === 'MAYBANK') {
-                            iso = parseDynamicDate(rowObj['Posting Date']);
-                            desc = rowObj['Transaction Description'];
-                            deb = cleanAmt(rowObj['Debit']);
-                            cre = cleanAmt(rowObj['Credit']);
-                        } else if (bank === 'MANDIRI') {
-                            iso = parseDynamicDate(rowObj['PostDate']);
-                            desc = (rowObj['Remarks'] || "") + " " + (rowObj['AdditionalDesc'] || "");
-                            deb = cleanAmt(rowObj['Debit Amount']);
-                            cre = cleanAmt(rowObj['Credit Amount']);
-                        } else if (bank === 'BNI') {
-                            iso = parseDynamicDate(rowObj['Value Date']?.substring(0,8));
-                            desc = rowObj['Description'];
-                            deb = cleanAmt(rowObj['Debit']);
-                            cre = cleanAmt(rowObj['Credit']);
-                        } else if (bank === 'BRI') {
-                            iso = parseDynamicDate(rowObj['TGL_TRAN']);
-                            desc = rowObj['DESK_TRAN'];
-                            deb = cleanAmt(rowObj['MUTASI_DEBET']);
-                            cre = cleanAmt(rowObj['MUTASI_KREDIT']);
-                        }
-                        if (iso) db.push({ iso, desc, deb, cre });
+                        let dateStr = rowObj['Date'] || rowObj['Posting Date'] || rowObj['PostDate'] || rowObj['Value Date'] || rowObj['TGL_TRAN'];
+                        let dateInfo = parseDynamicDate(dateStr);
+                        if (!dateInfo) continue;
+
+                        let desc = rowObj['Description'] || rowObj['Transaction Description'] || (rowObj['Remarks'] + " " + (rowObj['AdditionalDesc'] || "")) || rowObj['DESK_TRAN'];
+                        let deb = cleanAmt(rowObj['Debit'] || rowObj['Debit Amount'] || rowObj['MUTASI_DEBET'] || (rowObj['DB'] === 'DB' ? rowObj['Amount'] : 0));
+                        let cre = cleanAmt(rowObj['Credit'] || rowObj['Credit Amount'] || rowObj['MUTASI_KREDIT'] || (rowObj['CR'] === 'CR' ? rowObj['Amount'] : 0));
+
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, desc, deb, cre });
                     }
                 }
                 render();
@@ -212,14 +202,14 @@
         .forEach(i => {
             sD += i.deb; sC += i.cre;
             html += `<tr>
-                <td>${i.iso.split('-').reverse().join('/')}</td>
+                <td>${i.displayDate}</td>
                 <td style="font-size:11px">${i.desc}</td>
                 <td class="num-col txt-red">${i.deb > 0 ? i.deb.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td>
                 <td class="num-col txt-green">${i.cre > 0 ? i.cre.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td>
             </tr>`;
         });
 
-        document.getElementById('tableData').innerHTML = html || '<tr><td colspan="4" style="text-align:center; padding:20px;">Data kosong. Pastikan Bank yang dipilih benar.</td></tr>';
+        document.getElementById('tableData').innerHTML = html || '<tr><td colspan="4" style="text-align:center; padding:20px;">Data kosong atau tidak cocok dengan filter.</td></tr>';
         document.getElementById('dispDebit').innerText = sD.toLocaleString('en-US', {minimumFractionDigits:2});
         document.getElementById('dispCredit').innerText = sC.toLocaleString('en-US', {minimumFractionDigits:2});
     }
