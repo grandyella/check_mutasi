@@ -7,14 +7,15 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', sans-serif; margin: 20px; background-color: #f4f7f9; min-height: 100vh; display: flex; flex-direction: column; }
-        .container { max-width: 1400px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); flex: 1; }
+        .container { max-width: 1450px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); flex: 1; }
         .config-panel { background: #eef2f7; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #d1d9e6; }
         .row { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 10px; }
         .input-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 150px; }
         select, input { padding: 10px; border: 1px solid #bec8d0; border-radius: 6px; font-size: 14px; }
         .btn-group { display: flex; gap: 10px; }
-        .btn { padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.3s; font-size: 13px; display: flex; align-items: center; gap: 5px; }
-        .btn-copy { background: #3498db; color: white; }
+        .btn { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.3s; font-size: 12px; display: flex; align-items: center; gap: 5px; }
+        .btn-full { background: #3498db; color: white; }
+        .btn-data { background: #2ecc71; color: white; }
         .btn-reset { background: #95a5a6; color: white; }
         .info-rekening { background: #2c3e50; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none; border-left: 5px solid #f1c40f; }
         .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
@@ -29,10 +30,10 @@
         .txt-red { color: #e74c3c; }
         .txt-green { color: #27ae60; }
         .trx-id { font-family: 'Consolas', monospace; color: #2980b9; font-weight: bold; }
-        .kat-badge { padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; text-transform: uppercase; display: inline-block; min-width: 100px; text-align: center; }
-        .bg-sesama { background: #27ae60; } /* Hijau */
-        .bg-non { background: #f39c12; }    /* Oranye */
-        .bg-biaya { background: #8e44ad; }  /* Ungu */
+        .kat-badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; color: white; white-space: nowrap; }
+        .bg-sesama { background: #27ae60; }
+        .bg-non { background: #f39c12; }
+        .bg-biaya { background: #8e44ad; }
         footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; border-top: 1px solid #eee; }
         .heart { color: #e74c3c; }
     </style>
@@ -40,7 +41,7 @@
 <body>
 
 <div class="container">
-    <h2>📄 Mutasi Converter All Bank (Logic Biaya Update)</h2>
+    <h2>📄 Convert Mutasi All Bank</h2>
 
     <div class="config-panel">
         <div class="row">
@@ -61,7 +62,8 @@
                 <input type="file" id="csvFile" accept=".csv">
             </div>
             <div class="btn-group">
-                <button class="btn btn-copy" onclick="copyTable()">📋 Salin Data</button>
+                <button class="btn btn-full" onclick="copyFullTable()">📋 Salin Full Tabel</button>
+                <button class="btn btn-data" onclick="copyIsiSaja()">📄 Salin Isi Saja</button>
                 <button class="btn btn-reset" onclick="resetPage()">🔄 Reset</button>
             </div>
         </div>
@@ -107,27 +109,20 @@
 
     function extractTrxData(text) {
         if (!text) return { id: "-", kat: "-" };
-        
-        const upperText = text.toUpperCase();
+        let upperText = text.toUpperCase();
+        let kategori = "-";
+        let cleanId = "-";
+        const isFee = upperText.includes("BA JASA E-BANKING") || upperText.includes("BIAYA AUTOTRANSFER") || upperText.includes("ATCHG");
         const regex = /(N?BCA)-[A-Z0-9-]{5,}/i;
         const match = text.match(regex);
-        
-        let cleanId = "-";
-        let kategori = "-";
-
         if (match) {
             cleanId = match[0].toUpperCase();
-            
-            // LOGIKA BARU: Cek apakah ini Biaya Jasa/Admin
-            if (upperText.includes("BA JASA E-BANKING") || upperText.includes("BIAYA AUTOTRANSFER")) {
-                kategori = "Biaya Transfer Non BCA";
-            } else if (cleanId.startsWith('NBCA')) {
-                kategori = "Non BCA";
-            } else {
-                kategori = "Sesama BCA";
-            }
+            if (isFee) kategori = "Biaya Transfer Non BCA";
+            else if (cleanId.startsWith('NBCA')) kategori = "Non BCA";
+            else kategori = "Sesama BCA";
+        } else {
+            if (isFee) kategori = "Biaya Transfer Non BCA";
         }
-        
         return { id: cleanId, kat: kategori };
     }
 
@@ -162,7 +157,6 @@
             complete: (results) => {
                 db = [];
                 const data = results.data;
-                
                 if (bank === 'BCA') {
                     const accRow = data.find(r => r[0] && r[0].toLowerCase().includes("no. rekening"));
                     if (accRow) {
@@ -170,10 +164,8 @@
                         document.getElementById('dispAccNo').innerText = "No. Rekening: " + accRow[0].split(":")[1].trim();
                         document.getElementById('infoRekPanel').style.display = 'block';
                     }
-
                     let headerIdx = data.findIndex(r => r.some(c => c && c.toLowerCase().includes("tanggal transaksi")));
                     if (headerIdx === -1) return alert("Header tidak ditemukan!");
-                    
                     let headers = data[headerIdx].map(h => h.toLowerCase().trim());
                     let tglCol = headers.findIndex(h => h.includes("tanggal"));
                     let ketCol = headers.findIndex(h => h.includes("keterangan"));
@@ -184,22 +176,12 @@
                         if (!r[tglCol] || r[tglCol].toLowerCase().includes("saldo") || r[tglCol].toLowerCase().includes("mutasi")) continue;
                         let dateInfo = parseDynamicDate(r[tglCol]);
                         if (!dateInfo) continue;
-
                         let desc = r[ketCol] || "";
                         let amtStr = (r[jmlCol] || "").toUpperCase();
                         let amt = cleanAmt(amtStr);
                         let isCr = amtStr.includes("CR");
                         let trx = extractTrxData(desc);
-                        
-                        db.push({ 
-                            iso: dateInfo.iso, 
-                            displayDate: dateInfo.display, 
-                            trxId: trx.id,
-                            kategori: trx.kat,
-                            desc: desc, 
-                            deb: isCr ? 0 : amt, 
-                            cre: isCr ? amt : 0 
-                        });
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc, deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
                     }
                 } else {
                     let headers = data[0].map(h => h.trim());
@@ -227,7 +209,6 @@
         const start = document.getElementById('startDate').value;
         const end = document.getElementById('endDate').value;
         let sD = 0, sC = 0, html = '';
-
         db.filter(i => {
             const mS = (i.desc || "").toLowerCase().includes(term) || (i.trxId || "").toLowerCase().includes(term);
             const mD = (!start || i.iso >= start) && (!end || i.iso <= end);
@@ -235,27 +216,16 @@
         }).sort((a,b) => new Date(a.iso) - new Date(b.iso))
         .forEach(i => {
             sD += i.deb; sC += i.cre;
-            let katClass = "";
-            if (i.kategori === "Sesama BCA") katClass = "bg-sesama";
-            else if (i.kategori === "Non BCA") katClass = "bg-non";
-            else if (i.kategori === "Biaya Transfer Non BCA") katClass = "bg-biaya";
-            
-            html += `<tr>
-                <td>${i.displayDate}</td>
-                <td style="font-size:11px">${i.desc}</td>
-                <td class="num-col txt-red">${i.deb > 0 ? i.deb.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td>
-                <td class="num-col txt-green">${i.cre > 0 ? i.cre.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td>
-                <td class="trx-id">${i.trxId}</td>
-                <td><span class="kat-badge ${katClass}">${i.kategori}</span></td>
-            </tr>`;
+            let katClass = i.kategori === "Sesama BCA" ? "bg-sesama" : (i.kategori === "Non BCA" ? "bg-non" : (i.kategori === "Biaya Transfer Non BCA" ? "bg-biaya" : ""));
+            html += `<tr><td>${i.displayDate}</td><td style="font-size:11px">${i.desc}</td><td class="num-col txt-red">${i.deb > 0 ? i.deb.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td><td class="num-col txt-green">${i.cre > 0 ? i.cre.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td><td class="trx-id">${i.trxId}</td><td><span class="kat-badge ${katClass}">${i.kategori}</span></td></tr>`;
         });
-
         document.getElementById('tableData').innerHTML = html || '<tr><td colspan="6" style="text-align:center; padding:20px;">Data tidak ditemukan.</td></tr>';
         document.getElementById('dispDebit').innerText = sD.toLocaleString('en-US', {minimumFractionDigits:2});
         document.getElementById('dispCredit').innerText = sC.toLocaleString('en-US', {minimumFractionDigits:2});
     }
 
-    function copyTable() {
+    // FUNGSI 1: Salin Full Tabel (Termasuk Header & Semua Kolom)
+    function copyFullTable() {
         const rows = document.querySelectorAll("#mutasiTable tr");
         let content = "";
         rows.forEach(row => {
@@ -263,7 +233,27 @@
             row.querySelectorAll("td, th").forEach(col => rowData.push(col.innerText));
             content += rowData.join("\t") + "\n";
         });
-        navigator.clipboard.writeText(content).then(() => alert("Berhasil disalin!"));
+        saveToClipboard(content);
+    }
+
+    // FUNGSI 2: Salin Isi Saja (Hanya 4 Kolom Utama, Tanpa Header)
+    function copyIsiSaja() {
+        const rows = document.querySelectorAll("#tableData tr");
+        let content = "";
+        rows.forEach(row => {
+            let cells = row.querySelectorAll("td");
+            if (cells.length >= 4) {
+                // Ambil Tanggal (index 0), Keterangan (1), Debit (2), Credit (3)
+                let rowData = [cells[0].innerText, cells[1].innerText, cells[2].innerText, cells[3].innerText];
+                content += rowData.join("\t") + "\n";
+            }
+        });
+        if (!content || content.includes("Data tidak ditemukan")) return alert("Tidak ada data untuk disalin.");
+        saveToClipboard(content);
+    }
+
+    function saveToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => alert("Data berhasil disalin ke clipboard!"));
     }
 
     ['searchTerm', 'startDate', 'endDate'].forEach(id => document.getElementById(id).addEventListener('input', render));
