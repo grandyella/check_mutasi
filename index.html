@@ -34,6 +34,8 @@
         .bg-sesama { background: #27ae60; }
         .bg-non { background: #f39c12; }
         .bg-biaya { background: #8e44ad; }
+        .bg-manual { background: #34495e; } /* Navy untuk Manual */
+        .bg-biaya-manual { background: #16a085; } /* Tosca untuk Biaya Manual */
         footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; border-top: 1px solid #eee; }
         .heart { color: #e74c3c; }
     </style>
@@ -107,14 +109,26 @@
     let db = [];
     const todayISO = new Date().toISOString().split('T')[0];
 
-    function extractTrxData(text) {
+    function extractTrxData(text, amt) {
         if (!text) return { id: "-", kat: "-" };
         let upperText = text.toUpperCase();
         let kategori = "-";
         let cleanId = "-";
+
+        // Logic Baru: BI-FAST (Manual & Biaya Manual)
+        if (upperText.includes("BI-FAST")) {
+            if (upperText.includes("BIAYA TXN KE") && amt === 2500) {
+                return { id: "-", kat: "Biaya Transfer Manual" };
+            } else if (upperText.includes("TRANSFER KE") && amt > 2500) {
+                return { id: "-", kat: "Manual" };
+            }
+        }
+
+        // Logic Lama: BCA/Non-BCA
         const isFee = upperText.includes("BA JASA E-BANKING") || upperText.includes("BIAYA AUTOTRANSFER") || upperText.includes("ATCHG");
         const regex = /(N?BCA)-[A-Z0-9-]{5,}/i;
         const match = text.match(regex);
+        
         if (match) {
             cleanId = match[0].toUpperCase();
             if (isFee) kategori = "Biaya Transfer Non BCA";
@@ -123,6 +137,7 @@
         } else {
             if (isFee) kategori = "Biaya Transfer Non BCA";
         }
+        
         return { id: cleanId, kat: kategori };
     }
 
@@ -180,7 +195,7 @@
                         let amtStr = (r[jmlCol] || "").toUpperCase();
                         let amt = cleanAmt(amtStr);
                         let isCr = amtStr.includes("CR");
-                        let trx = extractTrxData(desc);
+                        let trx = extractTrxData(desc, amt);
                         db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc, deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
                     }
                 } else {
@@ -195,7 +210,8 @@
                         let desc = rowObj['Description'] || rowObj['Transaction Description'] || (rowObj['Remarks'] + " " + (rowObj['AdditionalDesc'] || "")) || rowObj['DESK_TRAN'] || "";
                         let deb = cleanAmt(rowObj['Debit'] || rowObj['Debit Amount'] || rowObj['MUTASI_DEBET'] || (rowObj['DB'] === 'DB' ? rowObj['Amount'] : 0));
                         let cre = cleanAmt(rowObj['Credit'] || rowObj['Credit Amount'] || rowObj['MUTASI_KREDIT'] || (rowObj['CR'] === 'CR' ? rowObj['Amount'] : 0));
-                        let trx = extractTrxData(desc);
+                        let totalAmt = deb > 0 ? deb : cre;
+                        let trx = extractTrxData(desc, totalAmt);
                         db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc, deb, cre });
                     }
                 }
@@ -216,7 +232,14 @@
         }).sort((a,b) => new Date(a.iso) - new Date(b.iso))
         .forEach(i => {
             sD += i.deb; sC += i.cre;
-            let katClass = i.kategori === "Sesama BCA" ? "bg-sesama" : (i.kategori === "Non BCA" ? "bg-non" : (i.kategori === "Biaya Transfer Non BCA" ? "bg-biaya" : ""));
+            let katClass = "";
+            switch(i.kategori) {
+                case "Sesama BCA": katClass = "bg-sesama"; break;
+                case "Non BCA": katClass = "bg-non"; break;
+                case "Biaya Transfer Non BCA": katClass = "bg-biaya"; break;
+                case "Manual": katClass = "bg-manual"; break;
+                case "Biaya Transfer Manual": katClass = "bg-biaya-manual"; break;
+            }
             html += `<tr><td>${i.displayDate}</td><td style="font-size:11px">${i.desc}</td><td class="num-col txt-red">${i.deb > 0 ? i.deb.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td><td class="num-col txt-green">${i.cre > 0 ? i.cre.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td><td class="trx-id">${i.trxId}</td><td><span class="kat-badge ${katClass}">${i.kategori}</span></td></tr>`;
         });
         document.getElementById('tableData').innerHTML = html || '<tr><td colspan="6" style="text-align:center; padding:20px;">Data tidak ditemukan.</td></tr>';
@@ -224,7 +247,6 @@
         document.getElementById('dispCredit').innerText = sC.toLocaleString('en-US', {minimumFractionDigits:2});
     }
 
-    // FUNGSI 1: Salin Full Tabel (Termasuk Header & Semua Kolom)
     function copyFullTable() {
         const rows = document.querySelectorAll("#mutasiTable tr");
         let content = "";
@@ -236,14 +258,12 @@
         saveToClipboard(content);
     }
 
-    // FUNGSI 2: Salin Isi Saja (Hanya 4 Kolom Utama, Tanpa Header)
     function copyIsiSaja() {
         const rows = document.querySelectorAll("#tableData tr");
         let content = "";
         rows.forEach(row => {
             let cells = row.querySelectorAll("td");
             if (cells.length >= 4) {
-                // Ambil Tanggal (index 0), Keterangan (1), Debit (2), Credit (3)
                 let rowData = [cells[0].innerText, cells[1].innerText, cells[2].innerText, cells[3].innerText];
                 content += rowData.join("\t") + "\n";
             }
@@ -253,7 +273,7 @@
     }
 
     function saveToClipboard(text) {
-        navigator.clipboard.writeText(text).then(() => alert("Data berhasil disalin ke clipboard!"));
+        navigator.clipboard.writeText(text).then(() => alert("Data berhasil disalin!"));
     }
 
     ['searchTerm', 'startDate', 'endDate'].forEach(id => document.getElementById(id).addEventListener('input', render));
