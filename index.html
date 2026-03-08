@@ -109,20 +109,20 @@
     let db = [];
     const todayISO = new Date().toISOString().split('T')[0];
 
-    // Fungsi ekstraksi khusus BCA Corporate
-    function extractBCAInfo(text, amt) {
+    // Fungsi ekstraksi khusus BCA Corporate dengan pengecekan Type (DB/CR)
+    function extractBCAInfo(text, amt, type) {
         if (!text) return { id: "-", kat: "-" };
         let upperText = text.toUpperCase();
         let kategori = "-";
         let cleanId = "-";
 
-        // Logic BI-FAST / Manual (Prioritas)
-        if (upperText.includes("BI-FAST") || upperText.includes("TRANSFER KE") || upperText.includes("BIAYA TXN KE")) {
+        // 1. BI-FAST / MANUAL LOGIC (Hanya jika tipe adalah Debit 'DB')
+        if (type === 'DB' && (upperText.includes("BI-FAST") || upperText.includes("TRANSFER KE") || upperText.includes("BIAYA TXN KE"))) {
             if (upperText.includes("BIAYA TXN") || amt === 2500) return { id: "-", kat: "Biaya Transfer Manual" };
             if (upperText.includes("TRANSFER KE") || amt > 2500) return { id: "-", kat: "Manual" };
         }
 
-        // Logic BCA / Non-BCA (Sistem)
+        // 2. BCA / NON-BCA LOGIC (Sistem)
         const isFee = upperText.includes("BA JASA E-BANKING") || upperText.includes("BIAYA AUTOTRANSFER") || upperText.includes("ATCHG");
         const regex = /(N?BCA)-[A-Z0-9-]{5,}/i;
         const match = text.match(regex);
@@ -194,14 +194,13 @@
                         let amtStr = (r[jmlCol] || "").toUpperCase();
                         let amt = cleanAmt(amtStr);
                         let isCr = amtStr.includes("CR");
+                        let typeTrx = isCr ? "CR" : "DB";
                         
-                        // KHUSUS BCA: Jalankan Extract Info
-                        let trx = extractBCAInfo(desc, amt);
+                        let trx = extractBCAInfo(desc, amt, typeTrx);
                         
                         db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc, deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
                     }
                 } else {
-                    // BANK LAIN: Tanpa Logic ID & Kategori
                     let headers = data[0].map(h => (h || "").trim());
                     for (let i = 1; i < data.length; i++) {
                         let r = data[i];
