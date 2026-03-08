@@ -37,6 +37,7 @@
         .bg-manual { background: #34495e; } 
         .bg-biaya-manual { background: #16a085; }
         footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; border-top: 1px solid #eee; }
+        .heart { color: #e74c3c; }
     </style>
 </head>
 <body>
@@ -54,6 +55,8 @@
                     <option value="BNI">BNI (Direct)</option>
                     <option value="MANDIRI">Mandiri (Statement)</option>
                     <option value="BRI">BRI (Corporate/CMS)</option>
+                    <option value="BSI">BSI</option>
+                    <option value="MAYBANK">Maybank</option>
                 </select>
             </div>
             <div class="input-group">
@@ -100,28 +103,26 @@
     </table>
 </div>
 
+<footer> Made With <span class="heart">❤️</span> Ahmad Zulfikar T </footer>
+
 <script>
     let db = [];
     const todayISO = new Date().toISOString().split('T')[0];
 
-    function extractTrxData(text, amt) {
+    // Fungsi ekstraksi khusus BCA Corporate
+    function extractBCAInfo(text, amt) {
         if (!text) return { id: "-", kat: "-" };
         let upperText = text.toUpperCase();
         let kategori = "-";
         let cleanId = "-";
 
-        // --- PRIORITAS 1: BI-FAST (Manual) ---
-        // Kita cek kata kunci utamanya dulu
+        // Logic BI-FAST / Manual (Prioritas)
         if (upperText.includes("BI-FAST") || upperText.includes("TRANSFER KE") || upperText.includes("BIAYA TXN KE")) {
-            if (upperText.includes("BIAYA TXN") || amt === 2500) {
-                return { id: "-", kat: "Biaya Transfer Manual" };
-            } 
-            if (upperText.includes("TRANSFER KE") || amt > 2500) {
-                return { id: "-", kat: "Manual" };
-            }
+            if (upperText.includes("BIAYA TXN") || amt === 2500) return { id: "-", kat: "Biaya Transfer Manual" };
+            if (upperText.includes("TRANSFER KE") || amt > 2500) return { id: "-", kat: "Manual" };
         }
 
-        // --- PRIORITAS 2: BCA / NON-BCA (Sistem) ---
+        // Logic BCA / Non-BCA (Sistem)
         const isFee = upperText.includes("BA JASA E-BANKING") || upperText.includes("BIAYA AUTOTRANSFER") || upperText.includes("ATCHG");
         const regex = /(N?BCA)-[A-Z0-9-]{5,}/i;
         const match = text.match(regex);
@@ -152,7 +153,6 @@
 
     function cleanAmt(val) {
         if (!val) return 0;
-        // Hapus CR/DB dan koma pemisah ribuan
         let s = val.toString().replace(/CR|DB/gi, '').replace(/,/g, '').replace(/"/g, '').trim();
         return parseFloat(s) || 0;
     }
@@ -171,16 +171,6 @@
                 db = [];
                 const data = results.data;
                 
-                // Cari index header
-                let headerIdx = data.findIndex(r => r.some(c => c && c.toLowerCase().includes("tanggal transaksi")));
-                if (headerIdx === -1) headerIdx = 0; // Fallback jika tidak ketemu header
-                
-                let headers = data[headerIdx].map(h => (h || "").toLowerCase().trim());
-                let tglCol = headers.findIndex(h => h.includes("tanggal"));
-                let ketCol = headers.findIndex(h => h.includes("keterangan"));
-                let jmlCol = headers.findIndex(h => h.includes("jumlah"));
-
-                // Logic khusus BCA Corporate Info Rekening
                 if (bank === 'BCA') {
                     const accRow = data.find(r => r[0] && r[0].toLowerCase().includes("no. rekening"));
                     if (accRow) {
@@ -188,32 +178,46 @@
                         document.getElementById('dispAccNo').innerText = "No. Rekening: " + accRow[0].split(":")[1].trim();
                         document.getElementById('infoRekPanel').style.display = 'block';
                     }
-                }
+                    let headerIdx = data.findIndex(r => r.some(c => c && c.toLowerCase().includes("tanggal transaksi")));
+                    if (headerIdx === -1) return alert("Header tidak ditemukan!");
+                    let headers = data[headerIdx].map(h => h.toLowerCase().trim());
+                    let tglCol = headers.findIndex(h => h.includes("tanggal"));
+                    let ketCol = headers.findIndex(h => h.includes("keterangan"));
+                    let jmlCol = headers.findIndex(h => h.includes("jumlah"));
 
-                for (let i = headerIdx + 1; i < data.length; i++) {
-                    let r = data[i];
-                    if (!r[tglCol] || r[tglCol].toLowerCase().includes("saldo")) continue;
-                    
-                    let dateInfo = parseDynamicDate(r[tglCol]);
-                    if (!dateInfo) continue;
+                    for (let i = headerIdx + 1; i < data.length; i++) {
+                        let r = data[i];
+                        if (!r[tglCol] || r[tglCol].toLowerCase().includes("saldo")) continue;
+                        let dateInfo = parseDynamicDate(r[tglCol]);
+                        if (!dateInfo) continue;
+                        let desc = r[ketCol] || "";
+                        let amtStr = (r[jmlCol] || "").toUpperCase();
+                        let amt = cleanAmt(amtStr);
+                        let isCr = amtStr.includes("CR");
+                        
+                        // KHUSUS BCA: Jalankan Extract Info
+                        let trx = extractBCAInfo(desc, amt);
+                        
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc, deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
+                    }
+                } else {
+                    // BANK LAIN: Tanpa Logic ID & Kategori
+                    let headers = data[0].map(h => (h || "").trim());
+                    for (let i = 1; i < data.length; i++) {
+                        let r = data[i];
+                        let rowObj = {};
+                        headers.forEach((h, idx) => rowObj[h] = r[idx]);
+                        
+                        let dateStr = rowObj['Date'] || rowObj['Posting Date'] || rowObj['PostDate'] || rowObj['Value Date'] || rowObj['TGL_TRAN'] || rowObj['Tanggal'];
+                        let dateInfo = parseDynamicDate(dateStr);
+                        if (!dateInfo) continue;
 
-                    let desc = r[ketCol] || "";
-                    let amtStr = (r[jmlCol] || "").toUpperCase();
-                    let amtValue = cleanAmt(amtStr);
-                    let isCr = amtStr.includes("CR");
-                    
-                    // Ekstraksi Kategori berdasarkan Keterangan dan Nominal
-                    let trx = extractTrxData(desc, amtValue);
-                    
-                    db.push({ 
-                        iso: dateInfo.iso, 
-                        displayDate: dateInfo.display, 
-                        trxId: trx.id,
-                        kategori: trx.kat,
-                        desc: desc, 
-                        deb: isCr ? 0 : amtValue, 
-                        cre: isCr ? amtValue : 0 
-                    });
+                        let desc = rowObj['Description'] || rowObj['Transaction Description'] || rowObj['Remarks'] || rowObj['DESK_TRAN'] || rowObj['Keterangan'] || "";
+                        let deb = cleanAmt(rowObj['Debit'] || rowObj['Debit Amount'] || rowObj['MUTASI_DEBET'] || (rowObj['DB'] === 'DB' ? rowObj['Amount'] : 0));
+                        let cre = cleanAmt(rowObj['Credit'] || rowObj['Credit Amount'] || rowObj['MUTASI_KREDIT'] || (rowObj['CR'] === 'CR' ? rowObj['Amount'] : 0));
+                        
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc, deb, cre });
+                    }
                 }
                 render();
             }
@@ -241,7 +245,6 @@
                 case "Manual": katClass = "bg-manual"; break;
                 case "Biaya Transfer Manual": katClass = "bg-biaya-manual"; break;
             }
-            
             html += `<tr>
                 <td>${i.displayDate}</td>
                 <td style="font-size:11px">${i.desc}</td>
@@ -282,7 +285,7 @@
     }
 
     function saveToClipboard(text) {
-        navigator.clipboard.writeText(text).then(() => alert("Berhasil disalin!"));
+        navigator.clipboard.writeText(text).then(() => alert("Data berhasil disalin!"));
     }
 
     ['searchTerm', 'startDate', 'endDate'].forEach(id => document.getElementById(id).addEventListener('input', render));
