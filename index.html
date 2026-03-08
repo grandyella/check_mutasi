@@ -29,9 +29,10 @@
         .txt-red { color: #e74c3c; }
         .txt-green { color: #27ae60; }
         .trx-id { font-family: 'Consolas', monospace; color: #2980b9; font-weight: bold; }
-        .kat-badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; color: white; }
-        .bg-sesama { background: #27ae60; }
-        .bg-non { background: #f39c12; }
+        .kat-badge { padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; text-transform: uppercase; display: inline-block; min-width: 100px; text-align: center; }
+        .bg-sesama { background: #27ae60; } /* Hijau */
+        .bg-non { background: #f39c12; }    /* Oranye */
+        .bg-biaya { background: #8e44ad; }  /* Ungu */
         footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; border-top: 1px solid #eee; }
         .heart { color: #e74c3c; }
     </style>
@@ -39,7 +40,7 @@
 <body>
 
 <div class="container">
-    <h2>📄 Convert Mutasi All Bank</h2>
+    <h2>📄 Mutasi Converter All Bank (Logic Biaya Update)</h2>
 
     <div class="config-panel">
         <div class="row">
@@ -107,25 +108,27 @@
     function extractTrxData(text) {
         if (!text) return { id: "-", kat: "-" };
         
-        // Regex untuk mencari pola yang mengandung BCA-
-        // match[0] akan mengambil kodenya
+        const upperText = text.toUpperCase();
         const regex = /(N?BCA)-[A-Z0-9-]{5,}/i;
         const match = text.match(regex);
         
+        let cleanId = "-";
+        let kategori = "-";
+
         if (match) {
-            let fullCode = match[0].toUpperCase();
-            let kategori = "Sesama BCA";
-            let cleanId = fullCode;
-
-            // Jika ada 'N' di depan BCA
-            if (fullCode.startsWith('NBCA')) {
+            cleanId = match[0].toUpperCase();
+            
+            // LOGIKA BARU: Cek apakah ini Biaya Jasa/Admin
+            if (upperText.includes("BA JASA E-BANKING") || upperText.includes("BIAYA AUTOTRANSFER")) {
+                kategori = "Biaya Transfer Non BCA";
+            } else if (cleanId.startsWith('NBCA')) {
                 kategori = "Non BCA";
-                cleanId = fullCode; // Tetap tampilkan NBCA sesuai permintaan contoh anda
+            } else {
+                kategori = "Sesama BCA";
             }
-
-            return { id: cleanId, kat: kategori };
         }
-        return { id: "-", kat: "-" };
+        
+        return { id: cleanId, kat: kategori };
     }
 
     function parseDynamicDate(dateStr) {
@@ -207,19 +210,11 @@
                         let dateStr = rowObj['Date'] || rowObj['Posting Date'] || rowObj['PostDate'] || rowObj['Value Date'] || rowObj['TGL_TRAN'];
                         let dateInfo = parseDynamicDate(dateStr);
                         if (!dateInfo) continue;
-
                         let desc = rowObj['Description'] || rowObj['Transaction Description'] || (rowObj['Remarks'] + " " + (rowObj['AdditionalDesc'] || "")) || rowObj['DESK_TRAN'] || "";
                         let deb = cleanAmt(rowObj['Debit'] || rowObj['Debit Amount'] || rowObj['MUTASI_DEBET'] || (rowObj['DB'] === 'DB' ? rowObj['Amount'] : 0));
                         let cre = cleanAmt(rowObj['Credit'] || rowObj['Credit Amount'] || rowObj['MUTASI_KREDIT'] || (rowObj['CR'] === 'CR' ? rowObj['Amount'] : 0));
                         let trx = extractTrxData(desc);
-
-                        db.push({ 
-                            iso: dateInfo.iso, 
-                            displayDate: dateInfo.display, 
-                            trxId: trx.id,
-                            kategori: trx.kat,
-                            desc, deb, cre 
-                        });
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc, deb, cre });
                     }
                 }
                 render();
@@ -240,7 +235,10 @@
         }).sort((a,b) => new Date(a.iso) - new Date(b.iso))
         .forEach(i => {
             sD += i.deb; sC += i.cre;
-            let katClass = i.kategori === "Sesama BCA" ? "bg-sesama" : (i.kategori === "Non BCA" ? "bg-non" : "");
+            let katClass = "";
+            if (i.kategori === "Sesama BCA") katClass = "bg-sesama";
+            else if (i.kategori === "Non BCA") katClass = "bg-non";
+            else if (i.kategori === "Biaya Transfer Non BCA") katClass = "bg-biaya";
             
             html += `<tr>
                 <td>${i.displayDate}</td>
