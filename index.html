@@ -7,7 +7,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', sans-serif; margin: 20px; background-color: #f4f7f9; min-height: 100vh; display: flex; flex-direction: column; }
-        .container { max-width: 1300px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); flex: 1; }
+        .container { max-width: 1400px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); flex: 1; }
         .config-panel { background: #eef2f7; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #d1d9e6; }
         .row { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 10px; }
         .input-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 150px; }
@@ -28,7 +28,10 @@
         .num-col { text-align: right; font-family: 'Courier New', monospace; font-weight: bold; }
         .txt-red { color: #e74c3c; }
         .txt-green { color: #27ae60; }
-        .trx-id { font-family: 'Consolas', monospace; color: #2980b9; font-weight: bold; background: #ebf5fb; padding: 2px 5px; border-radius: 4px; }
+        .trx-id { font-family: 'Consolas', monospace; color: #2980b9; font-weight: bold; }
+        .kat-badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; color: white; }
+        .bg-sesama { background: #27ae60; }
+        .bg-non { background: #f39c12; }
         footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; border-top: 1px solid #eee; }
         .heart { color: #e74c3c; }
     </style>
@@ -86,10 +89,11 @@
                 <th>Debit</th>
                 <th>Credit</th>
                 <th>Transaction ID</th>
+                <th>Kategori Transfer</th>
             </tr>
         </thead>
         <tbody id="tableData">
-            <tr><td colspan="5" style="text-align:center; padding:40px; color:#999;">Pilih bank & upload file CSV.</td></tr>
+            <tr><td colspan="6" style="text-align:center; padding:40px; color:#999;">Pilih bank & upload file CSV.</td></tr>
         </tbody>
     </table>
 </div>
@@ -100,19 +104,28 @@
     let db = [];
     const todayISO = new Date().toISOString().split('T')[0];
 
-    // Logika Pencarian Kode Transaksi yang Lebih Agresif
-    function extractTrxId(text) {
-        if (!text) return "-";
+    function extractTrxData(text) {
+        if (!text) return { id: "-", kat: "-" };
         
-        // Pola ini mencari "BCA-" dan karakter sekitarnya (Huruf/Angka/Strip)
-        // Contoh: 0BCA-BK-030326-238 atau 0NBCA-BK-020326-09
-        const regex = /(?:BCA)-[A-Z0-9-]{5,}/i;
+        // Regex untuk mencari pola yang mengandung BCA-
+        // match[0] akan mengambil kodenya
+        const regex = /(N?BCA)-[A-Z0-9-]{5,}/i;
         const match = text.match(regex);
         
         if (match) {
-            return match[0].toUpperCase(); 
+            let fullCode = match[0].toUpperCase();
+            let kategori = "Sesama BCA";
+            let cleanId = fullCode;
+
+            // Jika ada 'N' di depan BCA
+            if (fullCode.startsWith('NBCA')) {
+                kategori = "Non BCA";
+                cleanId = fullCode; // Tetap tampilkan NBCA sesuai permintaan contoh anda
+            }
+
+            return { id: cleanId, kat: kategori };
         }
-        return "-";
+        return { id: "-", kat: "-" };
     }
 
     function parseDynamicDate(dateStr) {
@@ -173,11 +186,13 @@
                         let amtStr = (r[jmlCol] || "").toUpperCase();
                         let amt = cleanAmt(amtStr);
                         let isCr = amtStr.includes("CR");
+                        let trx = extractTrxData(desc);
                         
                         db.push({ 
                             iso: dateInfo.iso, 
                             displayDate: dateInfo.display, 
-                            trxId: extractTrxId(desc),
+                            trxId: trx.id,
+                            kategori: trx.kat,
                             desc: desc, 
                             deb: isCr ? 0 : amt, 
                             cre: isCr ? amt : 0 
@@ -196,11 +211,13 @@
                         let desc = rowObj['Description'] || rowObj['Transaction Description'] || (rowObj['Remarks'] + " " + (rowObj['AdditionalDesc'] || "")) || rowObj['DESK_TRAN'] || "";
                         let deb = cleanAmt(rowObj['Debit'] || rowObj['Debit Amount'] || rowObj['MUTASI_DEBET'] || (rowObj['DB'] === 'DB' ? rowObj['Amount'] : 0));
                         let cre = cleanAmt(rowObj['Credit'] || rowObj['Credit Amount'] || rowObj['MUTASI_KREDIT'] || (rowObj['CR'] === 'CR' ? rowObj['Amount'] : 0));
+                        let trx = extractTrxData(desc);
 
                         db.push({ 
                             iso: dateInfo.iso, 
                             displayDate: dateInfo.display, 
-                            trxId: extractTrxId(desc),
+                            trxId: trx.id,
+                            kategori: trx.kat,
                             desc, deb, cre 
                         });
                     }
@@ -223,16 +240,19 @@
         }).sort((a,b) => new Date(a.iso) - new Date(b.iso))
         .forEach(i => {
             sD += i.deb; sC += i.cre;
+            let katClass = i.kategori === "Sesama BCA" ? "bg-sesama" : (i.kategori === "Non BCA" ? "bg-non" : "");
+            
             html += `<tr>
                 <td>${i.displayDate}</td>
                 <td style="font-size:11px">${i.desc}</td>
                 <td class="num-col txt-red">${i.deb > 0 ? i.deb.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td>
                 <td class="num-col txt-green">${i.cre > 0 ? i.cre.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td>
                 <td class="trx-id">${i.trxId}</td>
+                <td><span class="kat-badge ${katClass}">${i.kategori}</span></td>
             </tr>`;
         });
 
-        document.getElementById('tableData').innerHTML = html || '<tr><td colspan="5" style="text-align:center; padding:20px;">Data tidak ditemukan.</td></tr>';
+        document.getElementById('tableData').innerHTML = html || '<tr><td colspan="6" style="text-align:center; padding:20px;">Data tidak ditemukan.</td></tr>';
         document.getElementById('dispDebit').innerText = sD.toLocaleString('en-US', {minimumFractionDigits:2});
         document.getElementById('dispCredit').innerText = sC.toLocaleString('en-US', {minimumFractionDigits:2});
     }
