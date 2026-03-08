@@ -7,7 +7,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', sans-serif; margin: 20px; background-color: #f4f7f9; min-height: 100vh; display: flex; flex-direction: column; }
-        .container { max-width: 1200px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); flex: 1; }
+        .container { max-width: 1300px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); flex: 1; }
         .config-panel { background: #eef2f7; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #d1d9e6; }
         .row { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 10px; }
         .input-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 150px; }
@@ -28,7 +28,7 @@
         .num-col { text-align: right; font-family: 'Courier New', monospace; font-weight: bold; }
         .txt-red { color: #e74c3c; }
         .txt-green { color: #27ae60; }
-        .trx-id { font-family: 'Consolas', monospace; color: #2980b9; font-weight: bold; }
+        .trx-id { font-family: 'Consolas', monospace; color: #2980b9; font-weight: bold; background: #ebf5fb; padding: 2px 5px; border-radius: 4px; }
         footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; border-top: 1px solid #eee; }
         .heart { color: #e74c3c; }
     </style>
@@ -82,10 +82,10 @@
         <thead>
             <tr>
                 <th>Tanggal</th>
-                <th>Transaction ID</th>
                 <th>Keterangan</th>
                 <th>Debit</th>
                 <th>Credit</th>
+                <th>Transaction ID</th>
             </tr>
         </thead>
         <tbody id="tableData">
@@ -100,14 +100,19 @@
     let db = [];
     const todayISO = new Date().toISOString().split('T')[0];
 
-    // Fungsi Ekstrak ID Transaksi (Contoh: BCA-BK-020326-09)
+    // Logika Pencarian Kode Transaksi yang Lebih Agresif
     function extractTrxId(text) {
         if (!text) return "-";
-        // Mencari pola: Huruf/Angka yang diawali dengan ON (tapi ON-nya tidak diambil) 
-        // sampai bertemu spasi. Contoh: ... 0NBCA-BK-020326-09 ...
-        const regex = /0N([A-Z0-9-]{5,})/i;
+        
+        // Pola ini mencari "BCA-" dan karakter sekitarnya (Huruf/Angka/Strip)
+        // Contoh: 0BCA-BK-030326-238 atau 0NBCA-BK-020326-09
+        const regex = /(?:BCA)-[A-Z0-9-]{5,}/i;
         const match = text.match(regex);
-        return match ? match[1] : "-";
+        
+        if (match) {
+            return match[0].toUpperCase(); 
+        }
+        return "-";
     }
 
     function parseDynamicDate(dateStr) {
@@ -179,7 +184,6 @@
                         });
                     }
                 } else {
-                    // Logic bank lain
                     let headers = data[0].map(h => h.trim());
                     for (let i = 1; i < data.length; i++) {
                         let r = data[i];
@@ -221,10 +225,10 @@
             sD += i.deb; sC += i.cre;
             html += `<tr>
                 <td>${i.displayDate}</td>
-                <td class="trx-id">${i.trxId}</td>
                 <td style="font-size:11px">${i.desc}</td>
                 <td class="num-col txt-red">${i.deb > 0 ? i.deb.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td>
                 <td class="num-col txt-green">${i.cre > 0 ? i.cre.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td>
+                <td class="trx-id">${i.trxId}</td>
             </tr>`;
         });
 
