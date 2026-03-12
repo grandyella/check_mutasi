@@ -55,6 +55,8 @@
                     <option value="BNI">BNI (Direct)</option>
                     <option value="MANDIRI">Mandiri (Statement)</option>
                     <option value="BRI">BRI (Corporate/CMS)</option>
+                    <option value="BSI">BSI</option>
+                    <option value="MAYBANK">Maybank</option>
                 </select>
             </div>
             <div class="input-group">
@@ -136,11 +138,15 @@
 
     function parseDynamicDate(dateStr) {
         if (!dateStr) return null;
-        let clean = dateStr.toString().trim().replace(/"/g, '');
-
-        // Handle BCA "PEND"
-        if (clean.toUpperCase() === "PEND") {
-            return { iso: todayISO, display: "PEND" };
+        let clean = dateStr.toString().trim().replace(/"/g, '').toUpperCase();
+        
+        // Handle BCA "PENDING"
+        if (clean === "PEND") {
+            const now = new Date();
+            const d = String(now.getDate()).padStart(2, '0');
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const y = now.getFullYear();
+            return { iso: `${y}-${m}-${d}`, display: "PENDING" };
         }
 
         // Handle BNI (04/02/26 09.00.19)
@@ -152,8 +158,8 @@
              return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
         }
 
-        // Handle Mandiri: 11 March 2026
-        const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        // Handle Mandiri (Month Names)
+        const months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
         for(let mIdx=0; mIdx < months.length; mIdx++) {
             if(clean.includes(months[mIdx])) {
                 let parts = clean.split(' ');
@@ -164,13 +170,14 @@
             }
         }
 
-        // Handle ISO/BRI/BCA Lengkap: 2026-03-03 atau 12/03/2026
+        // Handle ISO/BRI (YYYY-MM-DD)
         if (clean.includes('-')) {
             let p = clean.split(' ')[0].split('-');
             if (p[0].length === 4) return { iso: p.join('-'), display: `${p[2]}/${p[1]}/${p[0]}` };
             return { iso: `${p[2]}-${p[1]}-${p[0]}`, display: `${p[0]}/${p[1]}/${p[2]}` };
         }
         
+        // General Slash (DD/MM/YYYY)
         if (clean.includes('/')) {
             let p = clean.split(' ')[0].split('/');
             let d = p[0].padStart(2, '0');
@@ -203,57 +210,69 @@
         }
 
         Papa.parse(file, {
-            header: true,
+            header: false,
             skipEmptyLines: true,
             delimiter: "",
             complete: (results) => {
                 db = [];
+                let data = results.data;
+                
                 if (bank === 'BCA') {
-                    Papa.parse(file, {
-                        header: false,
-                        complete: (bcaRes) => {
-                            let bcaData = bcaRes.data;
-                            let accRow = bcaData.find(r => r[0] && r[0].toLowerCase().includes("no. rekening"));
-                            if (accRow) {
-                                document.getElementById('dispBankName').innerText = "BANK BCA";
-                                document.getElementById('dispAccNo').innerText = "No. Rekening: " + accRow[0].split(":")[1].trim();
-                                document.getElementById('infoRekPanel').style.display = 'block';
-                            }
-                            let headerIdx = bcaData.findIndex(r => r.some(c => c && c.toLowerCase().includes("tanggal transaksi")));
-                            if(headerIdx === -1) return alert("Header BCA tidak ditemukan");
-                            
-                            let headers = bcaData[headerIdx].map(h => h.toLowerCase().trim());
-                            let tglCol = headers.findIndex(h => h.includes("tanggal"));
-                            let ketCol = headers.findIndex(h => h.includes("keterangan"));
-                            let jmlCol = headers.findIndex(h => h.includes("jumlah"));
+                    let accRow = data.find(r => r[0] && r[0].toLowerCase().includes("no. rekening"));
+                    if (accRow) {
+                        document.getElementById('dispBankName').innerText = "BANK BCA";
+                        document.getElementById('dispAccNo').innerText = "No. Rekening: " + accRow[0].split(":")[1].trim();
+                        document.getElementById('infoRekPanel').style.display = 'block';
+                    }
 
-                            for (let i = headerIdx + 1; i < bcaData.length; i++) {
-                                let r = bcaData[i];
-                                if (!r[tglCol] || r[tglCol].toLowerCase().includes("saldo")) continue;
-                                let dateInfo = parseDynamicDate(r[tglCol]);
-                                if (!dateInfo) continue;
-                                let amtStr = (r[jmlCol] || "").toUpperCase();
-                                let isCr = amtStr.includes("CR");
-                                let amt = cleanAmt(amtStr);
-                                let trx = extractBCAInfo(r[ketCol], amt, isCr ? "CR" : "DB");
-                                db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc: r[ketCol], deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
-                            }
-                            render();
-                        }
-                    });
+                    let headerIdx = data.findIndex(r => r.some(c => c && c.toLowerCase().includes("tanggal transaksi")));
+                    if (headerIdx === -1) return alert("Header BCA tidak ditemukan!");
+                    
+                    let headers = data[headerIdx].map(h => h.toLowerCase().trim());
+                    let tglCol = headers.findIndex(h => h.includes("tanggal"));
+                    let ketCol = headers.findIndex(h => h.includes("keterangan"));
+                    let jmlCol = headers.findIndex(h => h.includes("jumlah"));
+
+                    for (let i = headerIdx + 1; i < data.length; i++) {
+                        let r = data[i];
+                        if (!r[tglCol] || r[tglCol].toLowerCase().includes("saldo")) continue;
+                        
+                        let dateInfo = parseDynamicDate(r[tglCol]);
+                        if (!dateInfo) continue;
+
+                        let amtStr = (r[jmlCol] || "").toUpperCase();
+                        let isCr = amtStr.includes("CR");
+                        let amt = cleanAmt(amtStr);
+                        let trx = extractBCAInfo(r[ketCol], amt, isCr ? "CR" : "DB");
+                        
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc: r[ketCol], deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
+                    }
                 } else {
-                    results.data.forEach(row => {
-                        let dateStr = row['Post Date'] || row['PostDate'] || row['Posting Date'] || row['TGL_TRAN'] || row['Date'] || row['Tanggal'];
+                    // Logic Mandiri, BRI, BNI
+                    let headerIdx = data.findIndex(r => r.some(c => ["tgl_tran", "date", "posting date", "tanggal", "post date", "postdate"].includes(c.toLowerCase().trim())));
+                    if (headerIdx === -1) headerIdx = 0;
+                    
+                    let headers = data[headerIdx].map(h => (h || "").trim());
+                    for (let i = headerIdx + 1; i < data.length; i++) {
+                        let r = data[i];
+                        let rowObj = {};
+                        headers.forEach((h, idx) => rowObj[h] = r[idx]);
+                        
+                        let dateStr = rowObj['Post Date'] || rowObj['PostDate'] || rowObj['Posting Date'] || rowObj['TGL_TRAN'] || rowObj['Date'] || rowObj['Tanggal'];
                         let dateInfo = parseDynamicDate(dateStr);
-                        if (!dateInfo) return;
-                        let deb = cleanAmt(row['Debit'] || row['Debit Amount'] || row['MUTASI_DEBET']);
-                        let cre = cleanAmt(row['Credit'] || row['Credit Amount'] || row['MUTASI_KREDIT']);
-                        if(row['GLSIGN'] === 'Db' && deb === 0) deb = cleanAmt(row['SALDO_AKHIR_MUTASI']);
-                        if(row['GLSIGN'] === 'Cr' && cre === 0) cre = cleanAmt(row['SALDO_AKHIR_MUTASI']);
-                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc: row['Description'] || row['Remarks'] || row['DESK_TRAN'] || row['Keterangan'] || "", deb, cre });
-                    });
-                    render();
+                        if (!dateInfo) continue;
+
+                        let desc = rowObj['Description'] || rowObj['Remarks'] || rowObj['DESK_TRAN'] || rowObj['Keterangan'] || "";
+                        let deb = cleanAmt(rowObj['Debit'] || rowObj['Debit Amount'] || rowObj['MUTASI_DEBET']);
+                        let cre = cleanAmt(rowObj['Credit'] || rowObj['Credit Amount'] || rowObj['MUTASI_KREDIT']);
+                        
+                        if(rowObj['GLSIGN'] === 'Db' && deb === 0) deb = cleanAmt(rowObj['SALDO_AKHIR_MUTASI']);
+                        if(rowObj['GLSIGN'] === 'Cr' && cre === 0) cre = cleanAmt(rowObj['SALDO_AKHIR_MUTASI']);
+
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc, deb, cre });
+                    }
                 }
+                render();
             }
         });
     });
