@@ -140,7 +140,16 @@
         if (!dateStr) return null;
         let clean = dateStr.toString().trim().replace(/"/g, '');
 
-        // Handle Mandiri: 11 March 2026 19:39:19
+        // Handle BNI (04/02/26 09.00.19)
+        if (clean.includes('/') && clean.includes('.')) {
+             let p = clean.split(' ')[0].split('/');
+             let d = p[0].padStart(2, '0');
+             let m = p[1].padStart(2, '0');
+             let y = p[2].length === 2 ? "20" + p[2] : p[2];
+             return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
+        }
+
+        // Handle Mandiri: 11 March 2026
         const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
         for(let mIdx=0; mIdx < months.length; mIdx++) {
             if(clean.includes(months[mIdx])) {
@@ -152,14 +161,14 @@
             }
         }
 
-        // Handle ISO: 2026-03-03
+        // Handle ISO/BRI: 2026-03-03
         if (clean.includes('-')) {
             let p = clean.split(' ')[0].split('-');
             if (p[0].length === 4) return { iso: p.join('-'), display: `${p[2]}/${p[1]}/${p[0]}` };
             return { iso: `${p[2]}-${p[1]}-${p[0]}`, display: `${p[0]}/${p[1]}/${p[2]}` };
         }
         
-        // Handle Slash: 01/03/2026
+        // General Slash: 01/03/2026
         if (clean.includes('/')) {
             let p = clean.split(' ')[0].split('/');
             let d = p[0].padStart(2, '0');
@@ -173,6 +182,7 @@
     function cleanAmt(val) {
         if (!val) return 0;
         let s = val.toString().replace(/CR|DB/gi, '').replace(/,/g, '').replace(/"/g, '').trim();
+        if (s === '.') return 0; // Khusus BNI yang tulis .00
         return parseFloat(s) || 0;
     }
 
@@ -183,24 +193,22 @@
         const bank = document.getElementById('bankSource').value;
         if (!bank || !file) return;
 
-        // Auto Rekening dari nama file
         const fileNameMatch = file.name.match(/\d{10,}/);
         if (fileNameMatch) {
             document.getElementById('dispBankName').innerText = "BANK " + bank;
-            document.getElementById('dispAccNo').innerText = "No. Rekening : " + fileNameMatch[0];
+            document.getElementById('dispAccNo').innerText = "No. Rekening (Auto): " + fileNameMatch[0];
             document.getElementById('infoRekPanel').style.display = 'block';
         }
 
         Papa.parse(file, {
-            header: true, // Untuk Mandiri & BRI yang punya header baris 1
+            header: true,
             skipEmptyLines: true,
-            delimiter: "", // Auto detect pemisah (, atau ;)
+            delimiter: "",
             complete: (results) => {
                 db = [];
                 let data = results.data;
                 
                 if (bank === 'BCA') {
-                    // BCA butuh parsing ulang manual karena header bukan di baris 1
                     Papa.parse(file, {
                         header: false,
                         complete: (bcaRes) => {
@@ -231,17 +239,16 @@
                         }
                     });
                 } else {
-                    // Logic Mandiri, BRI, dll
                     data.forEach(row => {
-                        let dateStr = row['PostDate'] || row['Posting Date'] || row['TGL_TRAN'] || row['Date'] || row['Tanggal'];
+                        let dateStr = row['Post Date'] || row['PostDate'] || row['Posting Date'] || row['TGL_TRAN'] || row['Date'] || row['Tanggal'];
                         let dateInfo = parseDynamicDate(dateStr);
                         if (!dateInfo) return;
 
-                        let desc = row['Remarks'] || row['Description'] || row['DESK_TRAN'] || row['Keterangan'] || "";
-                        let deb = cleanAmt(row['Debit Amount'] || row['Debit'] || row['MUTASI_DEBET']);
-                        let cre = cleanAmt(row['Credit Amount'] || row['Credit'] || row['MUTASI_KREDIT']);
+                        let desc = row['Description'] || row['Remarks'] || row['DESK_TRAN'] || row['Keterangan'] || "";
+                        let deb = cleanAmt(row['Debit'] || row['Debit Amount'] || row['MUTASI_DEBET']);
+                        let cre = cleanAmt(row['Credit'] || row['Credit Amount'] || row['MUTASI_KREDIT']);
                         
-                        // Handle GLSIGN (BRI)
+                        // Handle BRI GLSIGN
                         if(row['GLSIGN'] === 'Db' && deb === 0) deb = cleanAmt(row['SALDO_AKHIR_MUTASI']);
                         if(row['GLSIGN'] === 'Cr' && cre === 0) cre = cleanAmt(row['SALDO_AKHIR_MUTASI']);
 
