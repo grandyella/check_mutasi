@@ -55,8 +55,6 @@
                     <option value="BNI">BNI (Direct)</option>
                     <option value="MANDIRI">Mandiri (Statement)</option>
                     <option value="BRI">BRI (Corporate/CMS)</option>
-                    <option value="BSI">BSI</option>
-                    <option value="MAYBANK">Maybank</option>
                 </select>
             </div>
             <div class="input-group">
@@ -140,6 +138,11 @@
         if (!dateStr) return null;
         let clean = dateStr.toString().trim().replace(/"/g, '');
 
+        // Handle BCA "PEND"
+        if (clean.toUpperCase() === "PEND") {
+            return { iso: todayISO, display: "PEND" };
+        }
+
         // Handle BNI (04/02/26 09.00.19)
         if (clean.includes('/') && clean.includes('.')) {
              let p = clean.split(' ')[0].split('/');
@@ -161,14 +164,13 @@
             }
         }
 
-        // Handle ISO/BRI: 2026-03-03
+        // Handle ISO/BRI/BCA Lengkap: 2026-03-03 atau 12/03/2026
         if (clean.includes('-')) {
             let p = clean.split(' ')[0].split('-');
             if (p[0].length === 4) return { iso: p.join('-'), display: `${p[2]}/${p[1]}/${p[0]}` };
             return { iso: `${p[2]}-${p[1]}-${p[0]}`, display: `${p[0]}/${p[1]}/${p[2]}` };
         }
         
-        // General Slash: 01/03/2026
         if (clean.includes('/')) {
             let p = clean.split(' ')[0].split('/');
             let d = p[0].padStart(2, '0');
@@ -182,7 +184,7 @@
     function cleanAmt(val) {
         if (!val) return 0;
         let s = val.toString().replace(/CR|DB/gi, '').replace(/,/g, '').replace(/"/g, '').trim();
-        if (s === '.') return 0; // Khusus BNI yang tulis .00
+        if (s === '.') return 0;
         return parseFloat(s) || 0;
     }
 
@@ -206,8 +208,6 @@
             delimiter: "",
             complete: (results) => {
                 db = [];
-                let data = results.data;
-                
                 if (bank === 'BCA') {
                     Papa.parse(file, {
                         header: false,
@@ -220,6 +220,8 @@
                                 document.getElementById('infoRekPanel').style.display = 'block';
                             }
                             let headerIdx = bcaData.findIndex(r => r.some(c => c && c.toLowerCase().includes("tanggal transaksi")));
+                            if(headerIdx === -1) return alert("Header BCA tidak ditemukan");
+                            
                             let headers = bcaData[headerIdx].map(h => h.toLowerCase().trim());
                             let tglCol = headers.findIndex(h => h.includes("tanggal"));
                             let ketCol = headers.findIndex(h => h.includes("keterangan"));
@@ -232,27 +234,23 @@
                                 if (!dateInfo) continue;
                                 let amtStr = (r[jmlCol] || "").toUpperCase();
                                 let isCr = amtStr.includes("CR");
-                                let trx = extractBCAInfo(r[ketCol], cleanAmt(amtStr), isCr ? "CR" : "DB");
-                                db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc: r[ketCol], deb: isCr ? 0 : cleanAmt(amtStr), cre: isCr ? cleanAmt(amtStr) : 0 });
+                                let amt = cleanAmt(amtStr);
+                                let trx = extractBCAInfo(r[ketCol], amt, isCr ? "CR" : "DB");
+                                db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc: r[ketCol], deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
                             }
                             render();
                         }
                     });
                 } else {
-                    data.forEach(row => {
+                    results.data.forEach(row => {
                         let dateStr = row['Post Date'] || row['PostDate'] || row['Posting Date'] || row['TGL_TRAN'] || row['Date'] || row['Tanggal'];
                         let dateInfo = parseDynamicDate(dateStr);
                         if (!dateInfo) return;
-
-                        let desc = row['Description'] || row['Remarks'] || row['DESK_TRAN'] || row['Keterangan'] || "";
                         let deb = cleanAmt(row['Debit'] || row['Debit Amount'] || row['MUTASI_DEBET']);
                         let cre = cleanAmt(row['Credit'] || row['Credit Amount'] || row['MUTASI_KREDIT']);
-                        
-                        // Handle BRI GLSIGN
                         if(row['GLSIGN'] === 'Db' && deb === 0) deb = cleanAmt(row['SALDO_AKHIR_MUTASI']);
                         if(row['GLSIGN'] === 'Cr' && cre === 0) cre = cleanAmt(row['SALDO_AKHIR_MUTASI']);
-
-                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc, deb, cre });
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc: row['Description'] || row['Remarks'] || row['DESK_TRAN'] || row['Keterangan'] || "", deb, cre });
                     });
                     render();
                 }
