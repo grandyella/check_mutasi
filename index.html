@@ -31,14 +31,13 @@
         .txt-green { color: #27ae60; }
         .trx-id { font-family: 'Consolas', monospace; color: #2980b9; font-weight: bold; }
         .kat-badge { padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; white-space: nowrap; }
-        .status-badge { padding: 3px 8px; border-radius: 12px; font-size: 10px; font-weight: bold; border: 1px solid #ddd; }
-        .tolakan-entry { background: #fff2f2; }
+        .status-badge { padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; color: #e74c3c; border: 1px solid #e74c3c; background: #fff5f5; font-family: 'Consolas', monospace; }
+        .tolakan-row { background: #fff2f2; }
         .bg-sesama { background: #27ae60; }
         .bg-non { background: #f39c12; }
         .bg-biaya { background: #8e44ad; }
         .bg-manual { background: #34495e; } 
         .bg-biaya-manual { background: #16a085; }
-        .status-ditolak { color: #e74c3c; border-color: #e74c3c; }
         footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; border-top: 1px solid #eee; }
         .heart { color: #e74c3c; }
     </style>
@@ -75,7 +74,7 @@
         <div class="row">
             <div class="input-group"><label>Dari Tanggal:</label><input type="date" id="startDate"></div>
             <div class="input-group"><label>Sampai Tanggal:</label><input type="date" id="endDate"></div>
-            <div class="input-group"><label>Cari Keterangan / Trx ID / Kode:</label><input type="text" id="searchTerm" placeholder="Cari teks..."></div>
+            <div class="input-group"><label>Cari Keterangan / Kode:</label><input type="text" id="searchTerm" placeholder="Cari teks..."></div>
         </div>
     </div>
 
@@ -98,7 +97,7 @@
                 <th>Credit</th>
                 <th>Transaction ID</th>
                 <th>Kategori Transfer</th>
-                <th>Status Transfer</th>
+                <th style="text-align:center">Status Transfer</th>
             </tr>
         </thead>
         <tbody id="tableData">
@@ -215,23 +214,21 @@
                         let amt = cleanAmt(amtStr);
                         let trx = extractBCAInfo(r[ketCol], amt, isCr ? "CR" : "DB");
                         
-                        // Extract Tolakan Code
                         let statusText = "";
                         if (isCr && r[ketCol].toUpperCase().includes("TOLAKAN")) {
                             let matchCode = r[ketCol].match(/\(([A-Z0-9]{4,5})/);
-                            statusText = matchCode ? matchCode[1] : "TOLAKAN";
+                            statusText = matchCode ? matchCode[1] : "";
                         }
 
                         db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc: r[ketCol], deb: isCr ? 0 : amt, cre: isCr ? amt : 0, status: statusText });
                     }
                     
-                    // Logic: Match Tolakan to Previous Debit
+                    // Match Only Code to Previous Debit
                     db.forEach((item, idx) => {
-                        if (item.cre > 0 && item.status !== "" && item.status !== "-") {
-                            // Cari transaksi debit sebelumnya dengan nominal sama yang belum ditandai
+                        if (item.cre > 0 && item.status !== "") {
                             for (let j = idx - 1; j >= 0; j--) {
                                 if (db[j].deb === item.cre && db[j].status === "") {
-                                    db[j].status = `DITOLAK (${item.status})`;
+                                    db[j].status = item.status; 
                                     break; 
                                 }
                             }
@@ -239,7 +236,6 @@
                     });
 
                 } else {
-                    // Generic (BNI, Mandiri, BRI)
                     let headerIdx = raw.findIndex(r => r.some(c => ["tgl_tran", "date", "posting date", "tanggal", "post date"].includes(c.toLowerCase().trim())));
                     if (headerIdx === -1) headerIdx = 0;
                     let headers = raw[headerIdx].map(h => (h || "").trim());
@@ -250,8 +246,6 @@
                         if (!dateInfo) continue;
                         let deb = cleanAmt(rowObj['Debit'] || rowObj['Debit Amount'] || rowObj['MUTASI_DEBET']);
                         let cre = cleanAmt(rowObj['Credit'] || rowObj['Credit Amount'] || rowObj['MUTASI_KREDIT']);
-                        if(rowObj['GLSIGN'] === 'Db' && deb === 0) deb = cleanAmt(rowObj['SALDO_AKHIR_MUTASI']);
-                        if(rowObj['GLSIGN'] === 'Cr' && cre === 0) cre = cleanAmt(rowObj['SALDO_AKHIR_MUTASI']);
                         db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc: rowObj['Description'] || rowObj['Remarks'] || rowObj['DESK_TRAN'] || "", deb, cre, status: "" });
                     }
                 }
@@ -267,7 +261,7 @@
         let sD = 0, sC = 0, html = '';
 
         db.filter(i => {
-            const mS = (i.desc || "").toLowerCase().includes(term) || (i.trxId || "").toLowerCase().includes(term) || (i.status || "").toLowerCase().includes(term);
+            const mS = (i.desc || "").toLowerCase().includes(term) || (i.status || "").toLowerCase().includes(term);
             const mD = (!start || i.iso >= start) && (!end || i.iso <= end);
             return mS && mD;
         }).sort((a,b) => new Date(a.iso) - new Date(b.iso))
@@ -280,8 +274,8 @@
             else if (i.kategori === "Manual") katClass = "bg-manual";
             else if (i.kategori === "Biaya Transfer Manual") katClass = "bg-biaya-manual";
 
-            let statusHtml = i.status ? `<span class="status-badge ${i.status.includes('DITOLAK') ? 'status-ditolak' : ''}">${i.status}</span>` : "-";
-            let rowClass = i.status && !i.status.includes('DITOLAK') ? 'tolakan-entry' : '';
+            // Baris tolakan diberi warna beda sedikit (opsional)
+            let rowClass = (i.cre > 0 && i.desc.toUpperCase().includes("TOLAKAN")) ? 'tolakan-row' : '';
 
             html += `<tr class="${rowClass}">
                 <td>${i.displayDate}</td>
@@ -290,7 +284,7 @@
                 <td class="num-col txt-green">${i.cre > 0 ? i.cre.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td>
                 <td class="trx-id">${i.trxId}</td>
                 <td><span class="kat-badge ${katClass}">${i.kategori}</span></td>
-                <td style="text-align:center">${statusHtml}</td>
+                <td style="text-align:center">${i.status ? `<span class="status-badge">${i.status}</span>` : '-'}</td>
             </tr>`;
         });
 
@@ -316,6 +310,7 @@
         rows.forEach(row => {
             let cells = row.querySelectorAll("td");
             if (cells.length >= 7) {
+                // Mengambil: Tanggal, Keterangan, Debit, Credit, dan Status Transfer
                 let rowData = [cells[0].innerText, cells[1].innerText, cells[2].innerText, cells[3].innerText, cells[6].innerText];
                 content += rowData.join("\t") + "\n";
             }
