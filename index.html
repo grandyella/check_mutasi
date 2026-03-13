@@ -25,18 +25,20 @@
         .val { font-size: 1.5rem; font-weight: bold; font-family: 'Consolas', monospace; }
         table { width: 100%; border-collapse: collapse; background: white; margin-top: 10px; }
         th { background: #2c3e50; color: white; padding: 12px; text-align: left; font-size: 13px; position: sticky; top: 0; }
-        td { padding: 10px; border-bottom: 1px solid #eee; font-size: 12px; }
+        td { padding: 10px; border-bottom: 1px solid #eee; font-size: 11px; }
         .num-col { text-align: right; font-family: 'Courier New', monospace; font-weight: bold; }
         .txt-red { color: #e74c3c; }
         .txt-green { color: #27ae60; }
         .trx-id { font-family: 'Consolas', monospace; color: #2980b9; font-weight: bold; }
-        .kat-badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; color: white; white-space: nowrap; }
-        .status-badge { background: #e67e22; color: white; padding: 3px 8px; border-radius: 4px; font-family: 'Consolas', monospace; font-weight: bold; }
+        .kat-badge { padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; white-space: nowrap; }
+        .status-badge { padding: 3px 8px; border-radius: 12px; font-size: 10px; font-weight: bold; border: 1px solid #ddd; }
+        .tolakan-entry { background: #fff2f2; }
         .bg-sesama { background: #27ae60; }
         .bg-non { background: #f39c12; }
         .bg-biaya { background: #8e44ad; }
         .bg-manual { background: #34495e; } 
         .bg-biaya-manual { background: #16a085; }
+        .status-ditolak { color: #e74c3c; border-color: #e74c3c; }
         footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; border-top: 1px solid #eee; }
         .heart { color: #e74c3c; }
     </style>
@@ -56,6 +58,8 @@
                     <option value="BNI">BNI (Direct)</option>
                     <option value="MANDIRI">Mandiri (Statement)</option>
                     <option value="BRI">BRI (Corporate/CMS)</option>
+                    <option value="BSI">BSI</option>
+                    <option value="MAYBANK">Maybank</option>
                 </select>
             </div>
             <div class="input-group">
@@ -71,7 +75,7 @@
         <div class="row">
             <div class="input-group"><label>Dari Tanggal:</label><input type="date" id="startDate"></div>
             <div class="input-group"><label>Sampai Tanggal:</label><input type="date" id="endDate"></div>
-            <div class="input-group"><label>Cari (Ket/ID/Status):</label><input type="text" id="searchTerm" placeholder="Cari teks atau kode tolakan..."></div>
+            <div class="input-group"><label>Cari Keterangan / Trx ID / Kode:</label><input type="text" id="searchTerm" placeholder="Cari teks..."></div>
         </div>
     </div>
 
@@ -93,7 +97,7 @@
                 <th>Debit</th>
                 <th>Credit</th>
                 <th>Transaction ID</th>
-                <th>Kategori</th>
+                <th>Kategori Transfer</th>
                 <th>Status Transfer</th>
             </tr>
         </thead>
@@ -138,15 +142,10 @@
     function parseDynamicDate(dateStr) {
         if (!dateStr) return null;
         let clean = dateStr.toString().trim().replace(/"/g, '').toUpperCase();
-        
         if (clean === "PEND") {
             const now = new Date();
-            const d = String(now.getDate()).padStart(2, '0');
-            const m = String(now.getMonth() + 1).padStart(2, '0');
-            const y = now.getFullYear();
-            return { iso: `${y}-${m}-${d}`, display: "PENDING" };
+            return { iso: now.toISOString().split('T')[0], display: "PENDING" };
         }
-
         if (clean.includes('/') && clean.includes('.')) {
              let p = clean.split(' ')[0].split('/');
              let d = p[0].padStart(2, '0');
@@ -154,7 +153,6 @@
              let y = p[2].length === 2 ? "20" + p[2] : p[2];
              return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
         }
-
         const months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
         for(let mIdx=0; mIdx < months.length; mIdx++) {
             if(clean.includes(months[mIdx])) {
@@ -165,13 +163,11 @@
                 return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
             }
         }
-
         if (clean.includes('-')) {
             let p = clean.split(' ')[0].split('-');
             if (p[0].length === 4) return { iso: p.join('-'), display: `${p[2]}/${p[1]}/${p[0]}` };
             return { iso: `${p[2]}-${p[1]}-${p[0]}`, display: `${p[0]}/${p[1]}/${p[2]}` };
         }
-        
         if (clean.includes('/')) {
             let p = clean.split(' ')[0].split('/');
             let d = p[0].padStart(2, '0');
@@ -189,30 +185,6 @@
         return parseFloat(s) || 0;
     }
 
-    function processTolakan() {
-        // Logic mencari tolakan: Cari Credit yang ada kata "TOLAKAN"
-        // Ambil kodenya, lalu cari baris Debit yang nominalnya sama persis sebelumnya.
-        for (let i = 0; i < db.length; i++) {
-            let desc = db[i].desc.toUpperCase();
-            if (db[i].cre > 0 && desc.includes("TOLAKAN")) {
-                // Regex mencari kode 4 digit dalam kurung atau setelah TOLAKAN, misal (W4FG atau W4FG
-                let match = desc.match(/\(?([A-Z0-9]{4})\s/);
-                if (match) {
-                    let rejectCode = match[1];
-                    db[i].statusTrf = rejectCode;
-                    
-                    // Cari baris DEBIT sebelumnya yang nominalnya sama
-                    for (let j = i - 1; j >= 0; j--) {
-                        if (db[j].deb === db[i].cre && db[j].statusTrf === "-") {
-                            db[j].statusTrf = rejectCode;
-                            break; // Hanya pasangkan ke 1 transaksi terdekat
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     function resetPage() { location.reload(); }
 
     document.getElementById('csvFile').addEventListener('change', function(e) {
@@ -221,57 +193,68 @@
         if (!bank || !file) return;
 
         Papa.parse(file, {
-            header: false,
-            skipEmptyLines: true,
-            complete: (results) => {
+            header: false, skipEmptyLines: true, complete: (results) => {
                 db = [];
-                let data = results.data;
+                let raw = results.data;
                 
                 if (bank === 'BCA') {
-                    let accRow = data.find(r => r[0] && r[0].toLowerCase().includes("no. rekening"));
-                    if (accRow) {
-                        document.getElementById('infoRekPanel').style.display = 'block';
-                        document.getElementById('dispAccNo').innerText = "No. Rekening: " + accRow[0].split(":")[1].trim();
-                    }
-
-                    let headerIdx = data.findIndex(r => r.some(c => c && c.toLowerCase().includes("tanggal transaksi")));
-                    if (headerIdx === -1) return alert("Header BCA tidak ditemukan!");
-                    
-                    let headers = data[headerIdx].map(h => h.toLowerCase().trim());
+                    let headerIdx = raw.findIndex(r => r.some(c => c && c.toLowerCase().includes("tanggal transaksi")));
+                    let headers = raw[headerIdx].map(h => h.toLowerCase().trim());
                     let tglCol = headers.findIndex(h => h.includes("tanggal"));
                     let ketCol = headers.findIndex(h => h.includes("keterangan"));
                     let jmlCol = headers.findIndex(h => h.includes("jumlah"));
 
-                    for (let i = headerIdx + 1; i < data.length; i++) {
-                        let r = data[i];
+                    for (let i = headerIdx + 1; i < raw.length; i++) {
+                        let r = raw[i];
                         if (!r[tglCol] || r[tglCol].toLowerCase().includes("saldo")) continue;
                         let dateInfo = parseDynamicDate(r[tglCol]);
                         if (!dateInfo) continue;
+
                         let amtStr = (r[jmlCol] || "").toUpperCase();
                         let isCr = amtStr.includes("CR");
                         let amt = cleanAmt(amtStr);
                         let trx = extractBCAInfo(r[ketCol], amt, isCr ? "CR" : "DB");
-                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc: r[ketCol], deb: isCr ? 0 : amt, cre: isCr ? amt : 0, statusTrf: "-" });
+                        
+                        // Extract Tolakan Code
+                        let statusText = "";
+                        if (isCr && r[ketCol].toUpperCase().includes("TOLAKAN")) {
+                            let matchCode = r[ketCol].match(/\(([A-Z0-9]{4,5})/);
+                            statusText = matchCode ? matchCode[1] : "TOLAKAN";
+                        }
+
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc: r[ketCol], deb: isCr ? 0 : amt, cre: isCr ? amt : 0, status: statusText });
                     }
+                    
+                    // Logic: Match Tolakan to Previous Debit
+                    db.forEach((item, idx) => {
+                        if (item.cre > 0 && item.status !== "" && item.status !== "-") {
+                            // Cari transaksi debit sebelumnya dengan nominal sama yang belum ditandai
+                            for (let j = idx - 1; j >= 0; j--) {
+                                if (db[j].deb === item.cre && db[j].status === "") {
+                                    db[j].status = `DITOLAK (${item.status})`;
+                                    break; 
+                                }
+                            }
+                        }
+                    });
+
                 } else {
-                    let headerIdx = data.findIndex(r => r.some(c => ["tgl_tran", "date", "posting date", "tanggal", "post date", "postdate"].includes(c.toLowerCase().trim())));
+                    // Generic (BNI, Mandiri, BRI)
+                    let headerIdx = raw.findIndex(r => r.some(c => ["tgl_tran", "date", "posting date", "tanggal", "post date"].includes(c.toLowerCase().trim())));
                     if (headerIdx === -1) headerIdx = 0;
-                    let headers = data[headerIdx].map(h => (h || "").trim());
-                    for (let i = headerIdx + 1; i < data.length; i++) {
-                        let r = data[i];
-                        let rowObj = {};
-                        headers.forEach((h, idx) => rowObj[h] = r[idx]);
-                        let dateStr = rowObj['Post Date'] || rowObj['PostDate'] || rowObj['Posting Date'] || rowObj['TGL_TRAN'] || rowObj['Date'] || rowObj['Tanggal'];
-                        let dateInfo = parseDynamicDate(dateStr);
+                    let headers = raw[headerIdx].map(h => (h || "").trim());
+                    for (let i = headerIdx + 1; i < raw.length; i++) {
+                        let r = raw[i];
+                        let rowObj = {}; headers.forEach((h, idx) => rowObj[h] = r[idx]);
+                        let dateInfo = parseDynamicDate(rowObj['Post Date'] || rowObj['PostDate'] || rowObj['Posting Date'] || rowObj['TGL_TRAN'] || rowObj['Date'] || rowObj['Tanggal']);
                         if (!dateInfo) continue;
                         let deb = cleanAmt(rowObj['Debit'] || rowObj['Debit Amount'] || rowObj['MUTASI_DEBET']);
                         let cre = cleanAmt(rowObj['Credit'] || rowObj['Credit Amount'] || rowObj['MUTASI_KREDIT']);
                         if(rowObj['GLSIGN'] === 'Db' && deb === 0) deb = cleanAmt(rowObj['SALDO_AKHIR_MUTASI']);
                         if(rowObj['GLSIGN'] === 'Cr' && cre === 0) cre = cleanAmt(rowObj['SALDO_AKHIR_MUTASI']);
-                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc: rowObj['Description'] || rowObj['Remarks'] || rowObj['DESK_TRAN'] || "", deb, cre, statusTrf: "-" });
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc: rowObj['Description'] || rowObj['Remarks'] || rowObj['DESK_TRAN'] || "", deb, cre, status: "" });
                     }
                 }
-                processTolakan();
                 render();
             }
         });
@@ -284,7 +267,7 @@
         let sD = 0, sC = 0, html = '';
 
         db.filter(i => {
-            const mS = i.desc.toLowerCase().includes(term) || i.trxId.toLowerCase().includes(term) || i.statusTrf.toLowerCase().includes(term);
+            const mS = (i.desc || "").toLowerCase().includes(term) || (i.trxId || "").toLowerCase().includes(term) || (i.status || "").toLowerCase().includes(term);
             const mD = (!start || i.iso >= start) && (!end || i.iso <= end);
             return mS && mD;
         }).sort((a,b) => new Date(a.iso) - new Date(b.iso))
@@ -297,14 +280,17 @@
             else if (i.kategori === "Manual") katClass = "bg-manual";
             else if (i.kategori === "Biaya Transfer Manual") katClass = "bg-biaya-manual";
 
-            html += `<tr>
+            let statusHtml = i.status ? `<span class="status-badge ${i.status.includes('DITOLAK') ? 'status-ditolak' : ''}">${i.status}</span>` : "-";
+            let rowClass = i.status && !i.status.includes('DITOLAK') ? 'tolakan-entry' : '';
+
+            html += `<tr class="${rowClass}">
                 <td>${i.displayDate}</td>
-                <td style="font-size:11px">${i.desc}</td>
+                <td style="font-size:10px">${i.desc}</td>
                 <td class="num-col txt-red">${i.deb > 0 ? i.deb.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td>
                 <td class="num-col txt-green">${i.cre > 0 ? i.cre.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td>
                 <td class="trx-id">${i.trxId}</td>
                 <td><span class="kat-badge ${katClass}">${i.kategori}</span></td>
-                <td>${i.statusTrf !== "-" ? `<span class="status-badge">${i.statusTrf}</span>` : "-"}</td>
+                <td style="text-align:center">${statusHtml}</td>
             </tr>`;
         });
 
@@ -329,7 +315,7 @@
         let content = "";
         rows.forEach(row => {
             let cells = row.querySelectorAll("td");
-            if (cells.length >= 6) {
+            if (cells.length >= 7) {
                 let rowData = [cells[0].innerText, cells[1].innerText, cells[2].innerText, cells[3].innerText, cells[6].innerText];
                 content += rowData.join("\t") + "\n";
             }
@@ -337,10 +323,7 @@
         saveToClipboard(content);
     }
 
-    function saveToClipboard(text) {
-        navigator.clipboard.writeText(text).then(() => alert("Data berhasil disalin!"));
-    }
-
+    function saveToClipboard(text) { navigator.clipboard.writeText(text).then(() => alert("Data berhasil disalin!")); }
     ['searchTerm', 'startDate', 'endDate'].forEach(id => document.getElementById(id).addEventListener('input', render));
 </script>
 </body>
