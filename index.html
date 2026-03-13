@@ -145,6 +145,13 @@
             const now = new Date();
             return { iso: now.toISOString().split('T')[0], display: "PENDING" };
         }
+        // Format YYYY-MM-DD (BSI)
+        if (clean.includes('-')) {
+            let p = clean.split(' ')[0].split('-');
+            if (p[0].length === 4) return { iso: p.join('-'), display: `${p[2]}/${p[1]}/${p[0]}` };
+            return { iso: `${p[2]}-${p[1]}-${p[0]}`, display: `${p[0]}/${p[1]}/${p[2]}` };
+        }
+        // Format DD/MM/YY atau DD/MM/YYYY
         if (clean.includes('/') && clean.includes('.')) {
              let p = clean.split(' ')[0].split('/');
              let d = p[0].padStart(2, '0');
@@ -161,11 +168,6 @@
                 let y = parts[2];
                 return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
             }
-        }
-        if (clean.includes('-')) {
-            let p = clean.split(' ')[0].split('-');
-            if (p[0].length === 4) return { iso: p.join('-'), display: `${p[2]}/${p[1]}/${p[0]}` };
-            return { iso: `${p[2]}-${p[1]}-${p[0]}`, display: `${p[0]}/${p[1]}/${p[2]}` };
         }
         if (clean.includes('/')) {
             let p = clean.split(' ')[0].split('/');
@@ -223,7 +225,6 @@
                         db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc: r[ketCol], deb: isCr ? 0 : amt, cre: isCr ? amt : 0, status: statusText });
                     }
                     
-                    // Match Only Code to Previous Debit
                     db.forEach((item, idx) => {
                         if (item.cre > 0 && item.status !== "") {
                             for (let j = idx - 1; j >= 0; j--) {
@@ -235,18 +236,71 @@
                         }
                     });
 
-                } else {
-                    let headerIdx = raw.findIndex(r => r.some(c => ["tgl_tran", "date", "posting date", "tanggal", "post date"].includes(c.toLowerCase().trim())));
+                } else if (bank === 'BSI') {
+                    // Blok Khusus BSI
+                    let headerIdx = raw.findIndex(r => r.some(c => (c || "").toLowerCase().trim() === "date"));
                     if (headerIdx === -1) headerIdx = 0;
-                    let headers = raw[headerIdx].map(h => (h || "").trim());
+                    let headers = raw[headerIdx].map(h => (h || "").trim().replace(/"/g, ''));
+                    
                     for (let i = headerIdx + 1; i < raw.length; i++) {
                         let r = raw[i];
-                        let rowObj = {}; headers.forEach((h, idx) => rowObj[h] = r[idx]);
-                        let dateInfo = parseDynamicDate(rowObj['Post Date'] || rowObj['PostDate'] || rowObj['Posting Date'] || rowObj['TGL_TRAN'] || rowObj['Date'] || rowObj['Tanggal']);
+                        if (!r || r.length < 5) continue;
+                        let rowObj = {}; 
+                        headers.forEach((h, idx) => { if(h) rowObj[h] = r[idx]; });
+                        
+                        let dateInfo = parseDynamicDate(rowObj['Date']);
                         if (!dateInfo) continue;
+                        
+                        let amt = cleanAmt(rowObj['Amount']);
+                        let isDeb = (rowObj['DB'] || "").toUpperCase().includes("DB");
+                        let isCre = (rowObj['CR'] || "").toUpperCase().includes("CR");
+                        
+                        db.push({ 
+                            iso: dateInfo.iso, 
+                            displayDate: dateInfo.display, 
+                            trxId: rowObj['FT Number'] || "-", 
+                            kategori: "-", 
+                            desc: rowObj['Description'] || "", 
+                            deb: isDeb ? amt : 0, 
+                            cre: isCre ? amt : 0, 
+                            status: "" 
+                        });
+                    }
+                } else {
+                    // Generic Logic untuk bank lain (BNI, Mandiri, BRI, dll)
+                    let headerIdx = raw.findIndex(r => r.some(c => ["tgl_tran", "date", "posting date", "tanggal", "post date"].includes(c.toLowerCase().trim())));
+                    if (headerIdx === -1) headerIdx = 0;
+                    let headers = raw[headerIdx].map(h => (h || "").trim().replace(/"/g, ''));
+                    
+                    for (let i = headerIdx + 1; i < raw.length; i++) {
+                        let r = raw[i];
+                        if (!r || r.length < 3) continue;
+                        let rowObj = {}; headers.forEach((h, idx) => { if(h) rowObj[h] = r[idx]; });
+                        
+                        let dateKey = ['Post Date', 'PostDate', 'Posting Date', 'TGL_TRAN', 'Date', 'Tanggal'].find(k => rowObj[k]);
+                        let dateInfo = parseDynamicDate(rowObj[dateKey]);
+                        if (!dateInfo) continue;
+                        
                         let deb = cleanAmt(rowObj['Debit'] || rowObj['Debit Amount'] || rowObj['MUTASI_DEBET']);
                         let cre = cleanAmt(rowObj['Credit'] || rowObj['Credit Amount'] || rowObj['MUTASI_KREDIT']);
-                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc: rowObj['Description'] || rowObj['Remarks'] || rowObj['DESK_TRAN'] || "", deb, cre, status: "" });
+                        
+                        // Fallback jika menggunakan sistem Flag Amount + DB/CR (seperti BSI tapi dipilih bank lain)
+                        if (deb === 0 && cre === 0 && rowObj['Amount']) {
+                            let amt = cleanAmt(rowObj['Amount']);
+                            if ((rowObj['DB'] || "").toUpperCase().includes("DB")) deb = amt;
+                            else if ((rowObj['CR'] || "").toUpperCase().includes("CR")) cre = amt;
+                        }
+
+                        db.push({ 
+                            iso: dateInfo.iso, 
+                            displayDate: dateInfo.display, 
+                            trxId: rowObj['FT Number'] || rowObj['ID'] || "-", 
+                            kategori: "-", 
+                            desc: rowObj['Description'] || rowObj['Remarks'] || rowObj['AdditionalDesc'] || rowObj['DESK_TRAN'] || "", 
+                            deb, 
+                            cre, 
+                            status: "" 
+                        });
                     }
                 }
                 render();
@@ -274,8 +328,7 @@
             else if (i.kategori === "Manual") katClass = "bg-manual";
             else if (i.kategori === "Biaya Transfer Manual") katClass = "bg-biaya-manual";
 
-            // Baris tolakan diberi warna beda sedikit (opsional)
-            let rowClass = (i.cre > 0 && i.desc.toUpperCase().includes("TOLAKAN")) ? 'tolakan-row' : '';
+            let rowClass = (i.cre > 0 && (i.desc || "").toUpperCase().includes("TOLAKAN")) ? 'tolakan-row' : '';
 
             html += `<tr class="${rowClass}">
                 <td>${i.displayDate}</td>
@@ -310,7 +363,6 @@
         rows.forEach(row => {
             let cells = row.querySelectorAll("td");
             if (cells.length >= 7) {
-                // Mengambil: Tanggal, Keterangan, Debit, Credit, dan Status Transfer
                 let rowData = [cells[0].innerText, cells[1].innerText, cells[2].innerText, cells[3].innerText, cells[6].innerText];
                 content += rowData.join("\t") + "\n";
             }
