@@ -74,6 +74,14 @@
         <div class="row">
             <div class="input-group"><label>Dari Tanggal:</label><input type="date" id="startDate"></div>
             <div class="input-group"><label>Sampai Tanggal:</label><input type="date" id="endDate"></div>
+            <div class="input-group">
+                <label>Filter Tipe:</label>
+                <select id="typeFilter">
+                    <option value="ALL">Semua Transaksi</option>
+                    <option value="DEBIT">Hanya Debit (Keluar)</option>
+                    <option value="CREDIT">Hanya Credit (Masuk)</option>
+                </select>
+            </div>
             <div class="input-group"><label>Cari Keterangan / Kode:</label><input type="text" id="searchTerm" placeholder="Cari teks..."></div>
         </div>
     </div>
@@ -110,6 +118,8 @@
 
 <script>
     let db = [];
+    const monthsShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthsFull = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
 
     function extractBCAInfo(text, amt, type) {
         if (!text) return { id: "-", kat: "-" };
@@ -141,40 +151,43 @@
     function parseDynamicDate(dateStr) {
         if (!dateStr) return null;
         let clean = dateStr.toString().trim().replace(/"/g, '').toUpperCase();
+        
         if (clean === "PEND") {
             const now = new Date();
-            return { iso: now.toISOString().split('T')[0], display: "PENDING" };
+            return { iso: now.toISOString().split('T')[0], day: now.getDate(), month: now.getMonth(), year: now.getFullYear(), display: "PENDING" };
         }
+
+        let d, m, y;
+
+        // Cek Nama Bulan (Full/Short)
+        for (let i = 0; i < 12; i++) {
+            if (clean.includes(monthsFull[i]) || clean.includes(monthsShort[i].toUpperCase())) {
+                let parts = clean.split(/[\s,/-]+/);
+                d = parseInt(parts[0]);
+                m = i;
+                y = parts[2] ? (parts[2].length === 2 ? "20" + parts[2] : parts[2]) : new Date().getFullYear();
+                return { iso: `${y}-${(m+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`, day: d, month: m, year: y };
+            }
+        }
+
         // Format YYYY-MM-DD (BSI)
         if (clean.includes('-')) {
             let p = clean.split(' ')[0].split('-');
-            if (p[0].length === 4) return { iso: p.join('-'), display: `${p[2]}/${p[1]}/${p[0]}` };
-            return { iso: `${p[2]}-${p[1]}-${p[0]}`, display: `${p[0]}/${p[1]}/${p[2]}` };
-        }
-        // Format DD/MM/YY atau DD/MM/YYYY
-        if (clean.includes('/') && clean.includes('.')) {
-             let p = clean.split(' ')[0].split('/');
-             let d = p[0].padStart(2, '0');
-             let m = p[1].padStart(2, '0');
-             let y = p[2].length === 2 ? "20" + p[2] : p[2];
-             return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
-        }
-        const months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
-        for(let mIdx=0; mIdx < months.length; mIdx++) {
-            if(clean.includes(months[mIdx])) {
-                let parts = clean.split(' ');
-                let d = parts[0].padStart(2, '0');
-                let m = (mIdx + 1).toString().padStart(2, '0');
-                let y = parts[2];
-                return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
-            }
-        }
-        if (clean.includes('/')) {
+            if (p[0].length === 4) { y = p[0]; m = parseInt(p[1]) - 1; d = p[2]; }
+            else { d = p[0]; m = parseInt(p[1]) - 1; y = p[2]; }
+        } 
+        // Format DD/MM/YY
+        else if (clean.includes('/')) {
             let p = clean.split(' ')[0].split('/');
-            let d = p[0].padStart(2, '0');
-            let m = p[1].padStart(2, '0');
-            let y = p[2] ? (p[2].length === 2 ? "20" + p[2] : p[2]) : new Date().getFullYear();
-            return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
+            d = p[0]; m = parseInt(p[1]) - 1;
+            y = p[2].length === 2 ? "20" + p[2] : p[2];
+        }
+
+        if (d && !isNaN(m) && y) {
+            return { 
+                iso: `${y}-${(m+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`, 
+                day: parseInt(d), month: m, year: parseInt(y) 
+            };
         }
         return null;
     }
@@ -221,54 +234,10 @@
                             let matchCode = r[ketCol].match(/\(([A-Z0-9]{4,5})/);
                             statusText = matchCode ? matchCode[1] : "";
                         }
-
-                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc: r[ketCol], deb: isCr ? 0 : amt, cre: isCr ? amt : 0, status: statusText });
-                    }
-                    
-                    db.forEach((item, idx) => {
-                        if (item.cre > 0 && item.status !== "") {
-                            for (let j = idx - 1; j >= 0; j--) {
-                                if (db[j].deb === item.cre && db[j].status === "") {
-                                    db[j].status = item.status; 
-                                    break; 
-                                }
-                            }
-                        }
-                    });
-
-                } else if (bank === 'BSI') {
-                    // Blok Khusus BSI
-                    let headerIdx = raw.findIndex(r => r.some(c => (c || "").toLowerCase().trim() === "date"));
-                    if (headerIdx === -1) headerIdx = 0;
-                    let headers = raw[headerIdx].map(h => (h || "").trim().replace(/"/g, ''));
-                    
-                    for (let i = headerIdx + 1; i < raw.length; i++) {
-                        let r = raw[i];
-                        if (!r || r.length < 5) continue;
-                        let rowObj = {}; 
-                        headers.forEach((h, idx) => { if(h) rowObj[h] = r[idx]; });
-                        
-                        let dateInfo = parseDynamicDate(rowObj['Date']);
-                        if (!dateInfo) continue;
-                        
-                        let amt = cleanAmt(rowObj['Amount']);
-                        let isDeb = (rowObj['DB'] || "").toUpperCase().includes("DB");
-                        let isCre = (rowObj['CR'] || "").toUpperCase().includes("CR");
-                        
-                        db.push({ 
-                            iso: dateInfo.iso, 
-                            displayDate: dateInfo.display, 
-                            trxId: rowObj['FT Number'] || "-", 
-                            kategori: "-", 
-                            desc: rowObj['Description'] || "", 
-                            deb: isDeb ? amt : 0, 
-                            cre: isCre ? amt : 0, 
-                            status: "" 
-                        });
+                        db.push({ ...dateInfo, trxId: trx.id, kategori: trx.kat, desc: r[ketCol], deb: isCr ? 0 : amt, cre: isCr ? amt : 0, status: statusText });
                     }
                 } else {
-                    // Generic Logic untuk bank lain (BNI, Mandiri, BRI, dll)
-                    let headerIdx = raw.findIndex(r => r.some(c => ["tgl_tran", "date", "posting date", "tanggal", "post date"].includes(c.toLowerCase().trim())));
+                    let headerIdx = raw.findIndex(r => r.some(c => ["tgl_tran", "date", "posting date", "tanggal", "post date", "postdate"].includes((c || "").toLowerCase().trim())));
                     if (headerIdx === -1) headerIdx = 0;
                     let headers = raw[headerIdx].map(h => (h || "").trim().replace(/"/g, ''));
                     
@@ -276,30 +245,19 @@
                         let r = raw[i];
                         if (!r || r.length < 3) continue;
                         let rowObj = {}; headers.forEach((h, idx) => { if(h) rowObj[h] = r[idx]; });
-                        
                         let dateKey = ['Post Date', 'PostDate', 'Posting Date', 'TGL_TRAN', 'Date', 'Tanggal'].find(k => rowObj[k]);
                         let dateInfo = parseDynamicDate(rowObj[dateKey]);
                         if (!dateInfo) continue;
                         
-                        let deb = cleanAmt(rowObj['Debit'] || rowObj['Debit Amount'] || rowObj['MUTASI_DEBET']);
-                        let cre = cleanAmt(rowObj['Credit'] || rowObj['Credit Amount'] || rowObj['MUTASI_KREDIT']);
+                        let deb = cleanAmt(rowObj['Debit'] || rowObj['Debit Amount'] || rowObj['MUTASI_DEBET'] || (rowObj['DB'] ? rowObj['Amount'] : 0));
+                        let cre = cleanAmt(rowObj['Credit'] || rowObj['Credit Amount'] || rowObj['MUTASI_KREDIT'] || (rowObj['CR'] ? rowObj['Amount'] : 0));
                         
-                        // Fallback jika menggunakan sistem Flag Amount + DB/CR (seperti BSI tapi dipilih bank lain)
-                        if (deb === 0 && cre === 0 && rowObj['Amount']) {
-                            let amt = cleanAmt(rowObj['Amount']);
-                            if ((rowObj['DB'] || "").toUpperCase().includes("DB")) deb = amt;
-                            else if ((rowObj['CR'] || "").toUpperCase().includes("CR")) cre = amt;
-                        }
-
                         db.push({ 
-                            iso: dateInfo.iso, 
-                            displayDate: dateInfo.display, 
+                            ...dateInfo,
                             trxId: rowObj['FT Number'] || rowObj['ID'] || "-", 
                             kategori: "-", 
                             desc: rowObj['Description'] || rowObj['Remarks'] || rowObj['AdditionalDesc'] || rowObj['DESK_TRAN'] || "", 
-                            deb, 
-                            cre, 
-                            status: "" 
+                            deb, cre, status: "" 
                         });
                     }
                 }
@@ -312,26 +270,25 @@
         const term = document.getElementById('searchTerm').value.toLowerCase();
         const start = document.getElementById('startDate').value;
         const end = document.getElementById('endDate').value;
+        const typeF = document.getElementById('typeFilter').value;
         let sD = 0, sC = 0, html = '';
 
         db.filter(i => {
             const mS = (i.desc || "").toLowerCase().includes(term) || (i.status || "").toLowerCase().includes(term);
             const mD = (!start || i.iso >= start) && (!end || i.iso <= end);
-            return mS && mD;
+            const mT = (typeF === "ALL") || (typeF === "DEBIT" && i.deb > 0) || (typeF === "CREDIT" && i.cre > 0);
+            return mS && mD && mT;
         }).sort((a,b) => new Date(a.iso) - new Date(b.iso))
         .forEach(i => {
             sD += i.deb; sC += i.cre;
-            let katClass = "";
-            if (i.kategori === "Sesama BCA") katClass = "bg-sesama";
-            else if (i.kategori === "Non BCA") katClass = "bg-non";
-            else if (i.kategori === "Biaya Transfer Non BCA") katClass = "bg-biaya";
-            else if (i.kategori === "Manual") katClass = "bg-manual";
-            else if (i.kategori === "Biaya Transfer Manual") katClass = "bg-biaya-manual";
-
+            let katClass = i.kategori === "Sesama BCA" ? "bg-sesama" : (i.kategori === "Non BCA" ? "bg-non" : (i.kategori === "Biaya Transfer Non BCA" ? "bg-biaya" : (i.kategori === "Manual" ? "bg-manual" : (i.kategori === "Biaya Transfer Manual" ? "bg-biaya-manual" : ""))));
             let rowClass = (i.cre > 0 && (i.desc || "").toUpperCase().includes("TOLAKAN")) ? 'tolakan-row' : '';
+            
+            // Format Output Tanggal: 05-Mar-2026
+            let displayDate = i.display === "PENDING" ? "PENDING" : `${i.day.toString().padStart(2,'0')}-${monthsShort[i.month]}-${i.year}`;
 
             html += `<tr class="${rowClass}">
-                <td>${i.displayDate}</td>
+                <td>${displayDate}</td>
                 <td style="font-size:10px">${i.desc}</td>
                 <td class="num-col txt-red">${i.deb > 0 ? i.deb.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td>
                 <td class="num-col txt-green">${i.cre > 0 ? i.cre.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td>
@@ -371,7 +328,7 @@
     }
 
     function saveToClipboard(text) { navigator.clipboard.writeText(text).then(() => alert("Data berhasil disalin!")); }
-    ['searchTerm', 'startDate', 'endDate'].forEach(id => document.getElementById(id).addEventListener('input', render));
+    ['searchTerm', 'startDate', 'endDate', 'typeFilter'].forEach(id => document.getElementById(id).addEventListener('input', render));
 </script>
 </body>
 </html>
