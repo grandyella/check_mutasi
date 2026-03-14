@@ -17,7 +17,6 @@
         .btn-full { background: #3498db; color: white; }
         .btn-data { background: #2ecc71; color: white; }
         .btn-reset { background: #95a5a6; color: white; }
-        .info-rekening { background: #2c3e50; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none; border-left: 5px solid #f1c40f; }
         .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
         .card { padding: 15px; border-radius: 8px; color: white; }
         .debit-card { background: #e74c3c; }
@@ -75,7 +74,7 @@
             <div class="input-group"><label>Dari Tanggal:</label><input type="date" id="startDate"></div>
             <div class="input-group"><label>Sampai Tanggal:</label><input type="date" id="endDate"></div>
             <div class="input-group">
-                <label>Filter Tipe:</label>
+                <label>Tampilkan Tipe:</label>
                 <select id="typeFilter">
                     <option value="ALL">Semua Transaksi</option>
                     <option value="DEBIT">Hanya Debit (Keluar)</option>
@@ -84,11 +83,6 @@
             </div>
             <div class="input-group"><label>Cari Keterangan / Kode:</label><input type="text" id="searchTerm" placeholder="Cari teks..."></div>
         </div>
-    </div>
-
-    <div id="infoRekPanel" class="info-rekening">
-        <h3 id="dispBankName" style="margin:0">BANK</h3>
-        <p id="dispAccNo" style="margin:5px 0 0 0">No. Rekening: -</p>
     </div>
 
     <div class="summary-grid">
@@ -118,8 +112,6 @@
 
 <script>
     let db = [];
-    const monthsShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const monthsFull = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
 
     function extractBCAInfo(text, amt, type) {
         if (!text) return { id: "-", kat: "-" };
@@ -154,41 +146,42 @@
         
         if (clean === "PEND") {
             const now = new Date();
-            return { iso: now.toISOString().split('T')[0], day: now.getDate(), month: now.getMonth(), year: now.getFullYear(), display: "PENDING" };
+            const d = now.getDate().toString().padStart(2, '0');
+            const m = (now.getMonth() + 1).toString().padStart(2, '0');
+            const y = now.getFullYear();
+            return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
         }
 
-        let d, m, y;
-
-        // Cek Nama Bulan (Full/Short)
-        for (let i = 0; i < 12; i++) {
-            if (clean.includes(monthsFull[i]) || clean.includes(monthsShort[i].toUpperCase())) {
-                let parts = clean.split(/[\s,/-]+/);
-                d = parseInt(parts[0]);
-                m = i;
-                y = parts[2] ? (parts[2].length === 2 ? "20" + parts[2] : parts[2]) : new Date().getFullYear();
-                return { iso: `${y}-${(m+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`, day: d, month: m, year: y };
+        // Handle format teks bulan (BCA/Bank Lain)
+        const months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+        const monthsShort = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+        
+        for(let i=0; i<12; i++) {
+            if(clean.includes(months[i]) || clean.includes(monthsShort[i])) {
+                let p = clean.split(/[\s,/-]+/);
+                let d = p[0].padStart(2, '0');
+                let m = (i + 1).toString().padStart(2, '0');
+                let y = p[2] ? (p[2].length === 2 ? "20" + p[2] : p[2]) : new Date().getFullYear();
+                return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
             }
         }
 
-        // Format YYYY-MM-DD (BSI)
+        // Format YYYY-MM-DD
         if (clean.includes('-')) {
             let p = clean.split(' ')[0].split('-');
-            if (p[0].length === 4) { y = p[0]; m = parseInt(p[1]) - 1; d = p[2]; }
-            else { d = p[0]; m = parseInt(p[1]) - 1; y = p[2]; }
-        } 
-        // Format DD/MM/YY
-        else if (clean.includes('/')) {
-            let p = clean.split(' ')[0].split('/');
-            d = p[0]; m = parseInt(p[1]) - 1;
-            y = p[2].length === 2 ? "20" + p[2] : p[2];
+            if (p[0].length === 4) return { iso: p.join('-'), display: `${p[2]}/${p[1]}/${p[0]}` };
+            return { iso: `${p[2]}-${p[1]}-${p[0]}`, display: `${p[0]}/${p[1]}/${p[2]}` };
         }
 
-        if (d && !isNaN(m) && y) {
-            return { 
-                iso: `${y}-${(m+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`, 
-                day: parseInt(d), month: m, year: parseInt(y) 
-            };
+        // Format DD/MM/YY atau DD/MM/YYYY
+        if (clean.includes('/')) {
+            let p = clean.split(' ')[0].split('/');
+            let d = p[0].padStart(2, '0');
+            let m = p[1].padStart(2, '0');
+            let y = p[2] ? (p[2].length === 2 ? "20" + p[2] : p[2]) : new Date().getFullYear();
+            return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
         }
+
         return null;
     }
 
@@ -234,7 +227,7 @@
                             let matchCode = r[ketCol].match(/\(([A-Z0-9]{4,5})/);
                             statusText = matchCode ? matchCode[1] : "";
                         }
-                        db.push({ ...dateInfo, trxId: trx.id, kategori: trx.kat, desc: r[ketCol], deb: isCr ? 0 : amt, cre: isCr ? amt : 0, status: statusText });
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc: r[ketCol], deb: isCr ? 0 : amt, cre: isCr ? amt : 0, status: statusText });
                     }
                 } else {
                     let headerIdx = raw.findIndex(r => r.some(c => ["tgl_tran", "date", "posting date", "tanggal", "post date", "postdate"].includes((c || "").toLowerCase().trim())));
@@ -252,13 +245,7 @@
                         let deb = cleanAmt(rowObj['Debit'] || rowObj['Debit Amount'] || rowObj['MUTASI_DEBET'] || (rowObj['DB'] ? rowObj['Amount'] : 0));
                         let cre = cleanAmt(rowObj['Credit'] || rowObj['Credit Amount'] || rowObj['MUTASI_KREDIT'] || (rowObj['CR'] ? rowObj['Amount'] : 0));
                         
-                        db.push({ 
-                            ...dateInfo,
-                            trxId: rowObj['FT Number'] || rowObj['ID'] || "-", 
-                            kategori: "-", 
-                            desc: rowObj['Description'] || rowObj['Remarks'] || rowObj['AdditionalDesc'] || rowObj['DESK_TRAN'] || "", 
-                            deb, cre, status: "" 
-                        });
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: rowObj['FT Number'] || rowObj['ID'] || "-", kategori: "-", desc: rowObj['Description'] || rowObj['Remarks'] || rowObj['AdditionalDesc'] || rowObj['DESK_TRAN'] || "", deb, cre, status: "" });
                     }
                 }
                 render();
@@ -283,12 +270,9 @@
             sD += i.deb; sC += i.cre;
             let katClass = i.kategori === "Sesama BCA" ? "bg-sesama" : (i.kategori === "Non BCA" ? "bg-non" : (i.kategori === "Biaya Transfer Non BCA" ? "bg-biaya" : (i.kategori === "Manual" ? "bg-manual" : (i.kategori === "Biaya Transfer Manual" ? "bg-biaya-manual" : ""))));
             let rowClass = (i.cre > 0 && (i.desc || "").toUpperCase().includes("TOLAKAN")) ? 'tolakan-row' : '';
-            
-            // Format Output Tanggal: 05-Mar-2026
-            let displayDate = i.display === "PENDING" ? "PENDING" : `${i.day.toString().padStart(2,'0')}-${monthsShort[i.month]}-${i.year}`;
 
             html += `<tr class="${rowClass}">
-                <td>${displayDate}</td>
+                <td>${i.displayDate}</td>
                 <td style="font-size:10px">${i.desc}</td>
                 <td class="num-col txt-red">${i.deb > 0 ? i.deb.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td>
                 <td class="num-col txt-green">${i.cre > 0 ? i.cre.toLocaleString('en-US', {minimumFractionDigits:2}) : '0.00'}</td>
