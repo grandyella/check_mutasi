@@ -58,6 +58,7 @@
                     <option value="BRI">BRI (Corporate/CMS)</option>
                     <option value="BSI">BSI</option>
                     <option value="JATIM">Bank Jatim</option>
+                    <option value="BTN">Bank BTN</option>
                     <option value="MAYBANK">Maybank</option>
                 </select>
             </div>
@@ -148,8 +149,7 @@
     function extractBCAInfo(text, amt, type) {
         if (!text) return { id: "-", kat: "-" };
         let upperText = text.toUpperCase();
-        let kategori = "-";
-        let cleanId = "-";
+        let kategori = "-", cleanId = "-";
         if (type === 'DB' && (upperText.includes("BI-FAST") || upperText.includes("TRANSFER KE"))) {
             if (amt === 2500) return { id: "-", kat: "Biaya Transfer Manual" };
             return { id: "-", kat: "Manual" };
@@ -170,14 +170,16 @@
         let clean = dateStr.toString().trim().toUpperCase();
         if (clean.includes('/')) {
             let p = clean.split(' ')[0].split('/');
-            let d = p[0].padStart(2, '0'), m = p[1].padStart(2, '0'), y = p[2].length === 2 ? "20" + p[2] : p[2];
+            let d = p[0].padStart(2, '0'), m = p[1].padStart(2, '0');
+            // BTN hanya DD/MM, asumsikan tahun saat ini jika tidak ada
+            let y = p[2] ? (p[2].length === 2 ? "20" + p[2] : p[2]) : new Date().getFullYear();
             return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
         }
         return null;
     }
 
     function cleanAmt(val) {
-        if (!val) return 0;
+        if (!val || val === "0") return 0;
         let s = val.toString().replace(/,/g, '').replace(/"/g, '').trim();
         return parseFloat(s) || 0;
     }
@@ -206,17 +208,24 @@
                         let trx = extractBCAInfo(r[1], amt, isCr ? 'CR' : 'DB');
                         db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc: r[1], deb: isCr ? 0 : amt, cre: isCr ? amt : 0, status: "" });
                     }
+                } else if (bank === 'BTN') {
+                    // BTN: No., Posting Date, Posting Time, Effective Date, Effective Time, Description, Debit, Credit, Balance, Reff No.
+                    let headerIdx = raw.findIndex(r => r.some(c => c && c.toLowerCase().includes("posting date")));
+                    for (let i = headerIdx + 1; i < raw.length; i++) {
+                        let r = raw[i]; 
+                        if (!r[1] || isNaN(parseInt(r[0]))) continue; // Lewati baris total/header
+                        let dateInfo = parseDynamicDate(r[1]);
+                        if (!dateInfo) continue;
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc: r[5], deb: cleanAmt(r[6]), cre: cleanAmt(r[7]), status: "" });
+                    }
                 } else if (bank === 'JATIM') {
-                    // JATIM: No, Posting Date, Effective Date, Account, Name, Description, Currency, Debit, Credit, Balance, Reference No
                     let headerIdx = raw.findIndex(r => r.some(c => c && c.toLowerCase().includes("posting date")));
                     for (let i = headerIdx + 1; i < raw.length; i++) {
                         let r = raw[i]; if (!r[1]) continue;
                         let dateInfo = parseDynamicDate(r[1]);
-                        let deb = cleanAmt(r[7]), cre = cleanAmt(r[8]);
-                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc: r[5], deb, cre, status: "" });
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc: r[5], deb: cleanAmt(r[7]), cre: cleanAmt(r[8]), status: "" });
                     }
                 } else {
-                    // Bank Lain (BNI, BSI, Mandiri, BRI) - Transaction ID diset "-"
                     let headerIdx = raw.findIndex(r => r.some(c => ["tgl_tran", "date", "tanggal"].includes((c || "").toLowerCase().trim())));
                     if (headerIdx === -1) headerIdx = 0;
                     for (let i = headerIdx + 1; i < raw.length; i++) {
