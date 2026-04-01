@@ -6,31 +6,41 @@
     <title>Mutasi Filter Pro - Ahmad Zulfikar T</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 20px; background-color: #f4f7f9; min-height: 100vh; display: flex; flex-direction: column; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background-color: #f4f7f9; min-height: 100vh; display: flex; flex-direction: column; }
         .container { max-width: 1550px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); flex: 1; }
         .config-panel { background: #eef2f7; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #d1d9e6; }
         .row { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 10px; }
         .input-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 150px; }
         select, input { padding: 10px; border: 1px solid #bec8d0; border-radius: 6px; font-size: 14px; }
-        .info-auto { font-size: 12px; color: #2980b9; font-weight: bold; margin-top: 5px; min-height: 18px; }
+        
+        /* Account Detection Style */
+        .info-auto { margin-top: 8px; min-height: 24px; display: flex; align-items: center; }
+        .acc-badge { background: #2c3e50; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .acc-badge.warning { background: #e67e22; }
+        .acc-badge .icon { font-size: 14px; }
+
         .btn-group { display: flex; gap: 10px; }
         .btn { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.3s; font-size: 12px; display: flex; align-items: center; gap: 5px; }
         .btn-full { background: #3498db; color: white; }
         .btn-data { background: #2ecc71; color: white; }
         .btn-reset { background: #95a5a6; color: white; }
+        .btn:hover { opacity: 0.8; transform: translateY(-1px); }
+
         .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
         .card { padding: 15px; border-radius: 8px; color: white; }
         .debit-card { background: #e74c3c; }
         .credit-card { background: #27ae60; }
         .val { font-size: 1.5rem; font-weight: bold; font-family: 'Consolas', monospace; }
-        table { width: 100%; border-collapse: collapse; background: white; margin-top: 10px; }
+        
+        table { width: 100%; border-collapse: collapse; background: white; margin-top: 10px; border-radius: 8px; overflow: hidden; }
         th { background: #2c3e50; color: white; padding: 12px; text-align: left; font-size: 13px; position: sticky; top: 0; }
-        td { padding: 10px; border-bottom: 1px solid #eee; font-size: 11px; }
-        .num-col { text-align: right; font-family: 'Courier New', monospace; font-weight: bold; }
+        td { padding: 10px; border-bottom: 1px solid #eee; font-size: 11px; vertical-align: middle; }
+        .num-col { text-align: right; font-family: 'Courier New', monospace; font-weight: bold; font-size: 13px; }
         .txt-red { color: #e74c3c; }
         .txt-green { color: #27ae60; }
-        .trx-id { font-family: 'Consolas', monospace; color: #2980b9; font-weight: bold; }
-        .kat-badge { padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; white-space: nowrap; }
+        .trx-id { font-family: 'Consolas', monospace; color: #2980b9; font-weight: bold; background: #eaf2f8; padding: 2px 5px; border-radius: 4px; }
+        .empty-cell { color: #ccc; font-style: italic; }
+        
         footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; border-top: 1px solid #eee; }
         .heart { color: #e74c3c; }
     </style>
@@ -78,29 +88,28 @@
                     <option value="CREDIT">Hanya Credit (Masuk)</option>
                 </select>
             </div>
-            <div class="input-group"><label>Cari Keterangan / Kode:</label><input type="text" id="searchTerm" placeholder="Cari teks..."></div>
+            <div class="input-group"><label>Cari Keterangan:</label><input type="text" id="searchTerm" placeholder="Cari kata kunci..."></div>
         </div>
     </div>
 
     <div class="summary-grid">
-        <div class="card debit-card"><small>TOTAL DEBIT (KELUAR)</small><div id="dispDebit" class="val">0.00</div></div>
-        <div class="card credit-card"><small>TOTAL CREDIT (MASUK)</small><div id="dispCredit" class="val">0.00</div></div>
+        <div class="card debit-card"><small>TOTAL DEBIT (KELUAR)</small><div id="dispDebit" class="val">0,00</div></div>
+        <div class="card credit-card"><small>TOTAL CREDIT (MASUK)</small><div id="dispCredit" class="val">0,00</div></div>
     </div>
 
     <table id="mutasiTable">
         <thead>
             <tr>
-                <th>Tanggal</th>
+                <th width="100">Tanggal</th>
                 <th>Keterangan</th>
-                <th>Debit</th>
-                <th>Credit</th>
-                <th>Transaction ID</th>
-                <th>Kategori Transfer</th>
-                <th style="text-align:center">Status Transfer</th>
+                <th width="150" style="text-align:right">Debit</th>
+                <th width="150" style="text-align:right">Credit</th>
+                <th width="180">Transaction ID</th>
+                <th width="120">Kategori</th>
             </tr>
         </thead>
         <tbody id="tableData">
-            <tr><td colspan="7" style="text-align:center; padding:40px; color:#999;">Upload file CSV untuk memulai.</td></tr>
+            <tr><td colspan="6" style="text-align:center; padding:40px; color:#999;">Silakan upload file mutasi bank.</td></tr>
         </tbody>
     </table>
 </div>
@@ -109,7 +118,8 @@
 
 <script>
     let db = [];
-    
+    let currentDetectedBank = "";
+
     const ACCOUNT_MAP = {
         "1020190001": { bank: "BNI", label: "PT SID - BNI 001" },
         "1040170002": { bank: "BNI", label: "PT SID - BNI 002" },
@@ -156,10 +166,12 @@
 
         if (detected) {
             bankSelect.value = detected.bank;
-            autoInfo.innerText = `✅ Terdeteksi: ${detected.label} (${detected.acc})`;
+            currentDetectedBank = detected.bank;
+            autoInfo.innerHTML = `<div class="acc-badge"><span class="icon">🏦</span> ${detected.label} • ${detected.acc}</div>`;
             return detected.bank;
         } else {
-            autoInfo.innerText = "⚠️ Akun tidak dikenali secara otomatis.";
+            currentDetectedBank = bankSelect.value;
+            autoInfo.innerHTML = `<div class="acc-badge warning"><span class="icon">⚠️</span> Akun Tidak Dikenali</div>`;
             return bankSelect.value;
         }
     }
@@ -171,10 +183,9 @@
             const now = new Date();
             return { iso: now.toISOString().split('T')[0], display: `${now.getDate().toString().padStart(2,'0')}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getFullYear()}` };
         }
-        const months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
         const monthsShort = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
         for(let i=0; i<12; i++) {
-            if(clean.includes(months[i]) || clean.includes(monthsShort[i])) {
+            if(clean.includes(monthsShort[i])) {
                 let p = clean.split(/[\s,/-]+/);
                 let d = p[0].padStart(2, '0');
                 let m = (i + 1).toString().padStart(2, '0');
@@ -218,43 +229,39 @@
 
                 if (bank === 'BCA') {
                     let headerIdx = raw.findIndex(r => r.some(c => c && c.toLowerCase().includes("tanggal transaksi")));
+                    if (headerIdx === -1) return;
                     let headers = raw[headerIdx].map(h => h.toLowerCase().trim());
-                    let tglCol = headers.findIndex(h => h.includes("tanggal")), ketCol = headers.findIndex(h => h.includes("keterangan")), jmlCol = headers.findIndex(h => h.includes("jumlah"));
+                    let tglCol = headers.findIndex(h => h.includes("tanggal")), 
+                        ketCol = headers.findIndex(h => h.includes("keterangan")), 
+                        jmlCol = headers.findIndex(h => h.includes("jumlah"));
+                    
                     for (let i = headerIdx + 1; i < raw.length; i++) {
                         let r = raw[i];
                         if (!r[tglCol] || r[tglCol].toLowerCase().includes("saldo")) continue;
                         let dateInfo = parseDynamicDate(r[tglCol]);
                         if (!dateInfo) continue;
                         let isCr = (r[jmlCol] || "").toUpperCase().includes("CR"), amt = cleanAmt(r[jmlCol]);
-                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc: r[ketCol], deb: isCr ? 0 : amt, cre: isCr ? amt : 0, status: "" });
+                        
+                        // Ekstrak Trx ID dari keterangan BCA jika ada
+                        let desc = r[ketCol] || "";
+                        let match = desc.match(/[A-Z0-9]{5,}/); // Cari kode unik di desc
+                        let trxId = match ? match[0] : "-";
+
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trxId, kategori: "-", desc: desc, deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
                     }
                 } else if (bank === 'JATIM') {
                     let headerIdx = raw.findIndex(r => r.some(c => c && c.toLowerCase().includes("posting date")));
                     let headers = raw[headerIdx].map(h => h.toLowerCase().trim());
-                    let tglCol = headers.indexOf("posting date"), ketCol = headers.indexOf("description"), debCol = headers.indexOf("debit"), creCol = headers.indexOf("credit"), refCol = headers.indexOf("reference no");
+                    let tglCol = headers.indexOf("posting date"), ketCol = headers.indexOf("description"), debCol = headers.indexOf("debit"), creCol = headers.indexOf("credit");
                     for (let i = headerIdx + 1; i < raw.length; i++) {
                         let r = raw[i];
                         if (!r[tglCol]) continue;
                         let dateInfo = parseDynamicDate(r[tglCol]);
                         if (!dateInfo) continue;
-                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: r[refCol] || "-", kategori: "-", desc: r[ketCol], deb: cleanAmt(r[debCol]), cre: cleanAmt(r[creCol]), status: "" });
-                    }
-                } else if (bank === 'BTN') {
-                    let headers = raw[0].map(h => (h || "").toLowerCase().trim());
-                    let tglCol = headers.indexOf("posting date"),
-                        ketCol = headers.indexOf("description"),
-                        debCol = headers.indexOf("debit"),
-                        creCol = headers.indexOf("credit"),
-                        refCol = headers.indexOf("reff no.");
-                    for (let i = 1; i < raw.length; i++) {
-                        let r = raw[i];
-                        // Abaikan baris total atau baris kosong
-                        if (!r[tglCol] || r[tglCol].toLowerCase().includes("total") || isNaN(parseInt(r[0]))) continue;
-                        let dateInfo = parseDynamicDate(r[tglCol]);
-                        if (!dateInfo) continue;
-                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: r[refCol] || "-", kategori: "-", desc: r[ketCol], deb: cleanAmt(r[debCol]), cre: cleanAmt(r[creCol]), status: "" });
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc: r[ketCol], deb: cleanAmt(r[debCol]), cre: cleanAmt(r[creCol]) });
                     }
                 } else {
+                    // Logic umum untuk Bank Lain
                     let headerIdx = raw.findIndex(r => r.some(c => ["tgl_tran", "date", "posting date", "tanggal", "post date"].includes((c || "").toLowerCase().trim())));
                     if (headerIdx === -1) headerIdx = 0;
                     let headers = raw[headerIdx].map(h => (h || "").trim().replace(/"/g, ''));
@@ -265,7 +272,7 @@
                         let dateInfo = parseDynamicDate(rowObj[dateKey]); if (!dateInfo) continue;
                         let deb = cleanAmt(rowObj['Debit'] || rowObj['Debit Amount'] || rowObj['MUTASI_DEBET'] || (rowObj['DB'] ? rowObj['Amount'] : 0));
                         let cre = cleanAmt(rowObj['Credit'] || rowObj['Credit Amount'] || rowObj['MUTASI_KREDIT'] || (rowObj['CR'] ? rowObj['Amount'] : 0));
-                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: rowObj['FT Number'] || rowObj['Reference No'] || rowObj['ID'] || "-", kategori: "-", desc: rowObj['Description'] || rowObj['Remarks'] || rowObj['DESK_TRAN'] || "", deb, cre, status: "" });
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc: rowObj['Description'] || rowObj['Remarks'] || rowObj['DESK_TRAN'] || "", deb, cre });
                     }
                 }
                 render();
@@ -277,6 +284,7 @@
         const term = document.getElementById('searchTerm').value.toLowerCase();
         const start = document.getElementById('startDate').value, end = document.getElementById('endDate').value, typeF = document.getElementById('typeFilter').value;
         let sD = 0, sC = 0, html = '';
+
         db.filter(i => {
             const mS = (i.desc || "").toLowerCase().includes(term);
             const mD = (!start || i.iso >= start) && (!end || i.iso <= end);
@@ -284,9 +292,20 @@
             return mS && mD && mT;
         }).sort((a,b) => new Date(a.iso) - new Date(b.iso)).forEach(i => {
             sD += i.deb; sC += i.cre;
-            html += `<tr><td>${i.displayDate}</td><td style="font-size:10px">${i.desc}</td><td class="num-col txt-red">${i.deb > 0 ? i.deb.toLocaleString('en-US',{minimumFractionDigits:2}) : '0.00'}</td><td class="num-col txt-green">${i.cre > 0 ? i.cre.toLocaleString('en-US',{minimumFractionDigits:2}) : '0.00'}</td><td class="trx-id">${i.trxId}</td><td><span class="kat-badge">${i.kategori}</span></td><td style="text-align:center">-</td></tr>`;
+            
+            // Kolom Transaction ID hanya menampilkan data jika bank adalah BCA
+            let trxDisplay = (currentDetectedBank === "BCA") ? `<span class="trx-id">${i.trxId}</span>` : `<span class="empty-cell">-</span>`;
+
+            html += `<tr>
+                <td>${i.displayDate}</td>
+                <td style="font-size:10px">${i.desc}</td>
+                <td class="num-col txt-red">${i.deb > 0 ? i.deb.toLocaleString('en-US',{minimumFractionDigits:2}) : '0,00'}</td>
+                <td class="num-col txt-green">${i.cre > 0 ? i.cre.toLocaleString('en-US',{minimumFractionDigits:2}) : '0,00'}</td>
+                <td>${trxDisplay}</td>
+                <td>${i.kategori}</td>
+            </tr>`;
         });
-        document.getElementById('tableData').innerHTML = html || '<tr><td colspan="7" style="text-align:center; padding:20px;">Data tidak ditemukan.</td></tr>';
+        document.getElementById('tableData').innerHTML = html || '<tr><td colspan="6" style="text-align:center; padding:20px;">Data tidak ditemukan.</td></tr>';
         document.getElementById('dispDebit').innerText = sD.toLocaleString('en-US', {minimumFractionDigits:2});
         document.getElementById('dispCredit').innerText = sC.toLocaleString('en-US', {minimumFractionDigits:2});
     }
@@ -306,7 +325,7 @@
         let content = "";
         rows.forEach(row => {
             let cells = row.querySelectorAll("td");
-            if (cells.length >= 7) {
+            if (cells.length >= 4) {
                 let rowData = [cells[0].innerText, cells[1].innerText, cells[2].innerText, cells[3].innerText, cells[4].innerText];
                 content += rowData.join("\t") + "\n";
             }
@@ -315,7 +334,7 @@
     }
 
     function saveToClipboard(text) { navigator.clipboard.writeText(text).then(() => alert("Data berhasil disalin!")); }
-    ['searchTerm', 'startDate', 'endDate', 'typeFilter'].forEach(id => document.getElementById(id).addEventListener('input', render));
+    ['searchTerm', 'startDate', 'endDate', 'typeFilter', 'bankSource'].forEach(id => document.getElementById(id).addEventListener('input', render));
 </script>
 </body>
 </html>
