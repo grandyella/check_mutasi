@@ -12,6 +12,7 @@
         .row { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 10px; }
         .input-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 150px; }
         select, input { padding: 10px; border: 1px solid #bec8d0; border-radius: 6px; font-size: 14px; }
+        .info-auto { font-size: 12px; color: #2980b9; font-weight: bold; margin-top: 5px; min-height: 18px; }
         .btn-group { display: flex; gap: 10px; }
         .btn { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.3s; font-size: 12px; display: flex; align-items: center; gap: 5px; }
         .btn-full { background: #3498db; color: white; }
@@ -59,6 +60,7 @@
                     <option value="BSI">BSI</option>
                     <option value="MAYBANK">Maybank</option>
                 </select>
+                <div id="autoInfo" class="info-auto"></div>
             </div>
             <div class="input-group">
                 <label><strong>2. Upload CSV:</strong></label>
@@ -103,7 +105,7 @@
             </tr>
         </thead>
         <tbody id="tableData">
-            <tr><td colspan="7" style="text-align:center; padding:40px; color:#999;">Pilih bank & upload file CSV.</td></tr>
+            <tr><td colspan="7" style="text-align:center; padding:40px; color:#999;">Upload file CSV untuk memulai.</td></tr>
         </tbody>
     </table>
 </div>
@@ -112,6 +114,66 @@
 
 <script>
     let db = [];
+    
+    // Database Rekening
+    const ACCOUNT_MAP = {
+        // PT SID
+        "1020190001": { bank: "BNI", label: "PT SID - BNI 001" },
+        "1040170002": { bank: "BNI", label: "PT SID - BNI 002" },
+        "1030170004": { bank: "BNI", label: "PT SID - BNI 004" },
+        "1020170006": { bank: "BNI", label: "PT SID - BNI 006" },
+        "2030170007": { bank: "BNI", label: "PT SID - BNI 007" },
+        "5995333390": { bank: "BCA", label: "PT SID - BCA" },
+        "034001002848309": { bank: "BRI", label: "PT SID - BRI OTISTA 09" },
+        "113001000661301": { bank: "BRI", label: "PT SID - BRI BANGKA 01" },
+        "1270011209408": { bank: "MANDIRI", label: "PT SID - MANDIRI" },
+        "0641003913": { bank: "JATIM", label: "PT SID - JATIM" },
+        "7298344674": { bank: "BSI", label: "PT SID - BSI" },
+        "0061801300000149": { bank: "BTN", label: "PT SID - BTN KEMANG" },
+        "0001601880007584": { bank: "BTN", label: "PT SID - BTN BEKASI" },
+        "1000809288": { bank: "BSN", label: "PT SID - BSN" },
+        // Yayasan SID
+        "6700020201": { bank: "BNI", label: "YYS SID - BNI 01" },
+        "945664832": { bank: "BNI", label: "YYS SID - BNI 32" },
+        "5995553551": { bank: "BCA", label: "YYS SID - BCA" },
+        "113001000750566": { bank: "BRI", label: "YYS SID - BRI" },
+        // PT MMI
+        "2863038278": { bank: "BCA", label: "PT MMI - BCA" },
+        // Yayasan Guru Belajar
+        "1260013546501": { bank: "MANDIRI", label: "YYS GURU BELAJAR - MANDIRI" },
+        // BCA Epicentrum/Manhattan dll
+        "5055082526": { bank: "BCA", label: "BCA Epicentrum" },
+        "5995232526": { bank: "BCA", label: "BCA Manhattan" },
+        "113001000457304": { bank: "BRI", label: "BRI" },
+        "7342760880": { bank: "BSI", label: "BSI (Maxima)" },
+        "2775000772": { bank: "MAYBANK", label: "Maybank Saving" },
+        "2775000817": { bank: "MAYBANK", label: "Maybank Kreditur" },
+        "113001000683303": { bank: "BRI", label: "BRI YKID" }
+    };
+
+    function detectBankAndAccount(fileName, rawData) {
+        let fullText = JSON.stringify(rawData) + fileName;
+        let detected = null;
+
+        for (let accNo in ACCOUNT_MAP) {
+            if (fullText.includes(accNo)) {
+                detected = { acc: accNo, ...ACCOUNT_MAP[accNo] };
+                break;
+            }
+        }
+        
+        const autoInfo = document.getElementById('autoInfo');
+        const bankSelect = document.getElementById('bankSource');
+
+        if (detected) {
+            bankSelect.value = detected.bank;
+            autoInfo.innerText = `✅ Terdeteksi: ${detected.label} (${detected.acc})`;
+            return detected.bank;
+        } else {
+            autoInfo.innerText = "⚠️ Akun tidak dikenali secara otomatis.";
+            return bankSelect.value;
+        }
+    }
 
     function extractBCAInfo(text, amt, type) {
         if (!text) return { id: "-", kat: "-" };
@@ -152,7 +214,6 @@
             return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
         }
 
-        // Handle format teks bulan (BCA/Bank Lain)
         const months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
         const monthsShort = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
         
@@ -166,14 +227,12 @@
             }
         }
 
-        // Format YYYY-MM-DD
         if (clean.includes('-')) {
             let p = clean.split(' ')[0].split('-');
             if (p[0].length === 4) return { iso: p.join('-'), display: `${p[2]}/${p[1]}/${p[0]}` };
             return { iso: `${p[2]}-${p[1]}-${p[0]}`, display: `${p[0]}/${p[1]}/${p[2]}` };
         }
 
-        // Format DD/MM/YY atau DD/MM/YYYY
         if (clean.includes('/')) {
             let p = clean.split(' ')[0].split('/');
             let d = p[0].padStart(2, '0');
@@ -196,14 +255,20 @@
 
     document.getElementById('csvFile').addEventListener('change', function(e) {
         const file = e.target.files[0];
-        const bank = document.getElementById('bankSource').value;
-        if (!bank || !file) return;
+        if (!file) return;
 
         Papa.parse(file, {
             header: false, skipEmptyLines: true, complete: (results) => {
                 db = [];
                 let raw = results.data;
                 
+                // Deteksi Otomatis Bank & No Rekening
+                const bank = detectBankAndAccount(file.name, raw);
+                if (!bank) {
+                    alert("Bank tidak terdeteksi. Silakan pilih bank secara manual.");
+                    return;
+                }
+
                 if (bank === 'BCA') {
                     let headerIdx = raw.findIndex(r => r.some(c => c && c.toLowerCase().includes("tanggal transaksi")));
                     let headers = raw[headerIdx].map(h => h.toLowerCase().trim());
