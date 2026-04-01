@@ -31,13 +31,6 @@
         .txt-green { color: #27ae60; }
         .trx-id { font-family: 'Consolas', monospace; color: #2980b9; font-weight: bold; }
         .kat-badge { padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; white-space: nowrap; }
-        .status-badge { padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; color: #e74c3c; border: 1px solid #e74c3c; background: #fff5f5; font-family: 'Consolas', monospace; }
-        .tolakan-row { background: #fff2f2; }
-        .bg-sesama { background: #27ae60; }
-        .bg-non { background: #f39c12; }
-        .bg-biaya { background: #8e44ad; }
-        .bg-manual { background: #34495e; } 
-        .bg-biaya-manual { background: #16a085; }
         footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; border-top: 1px solid #eee; }
         .heart { color: #e74c3c; }
     </style>
@@ -58,6 +51,7 @@
                     <option value="MANDIRI">Mandiri (Statement)</option>
                     <option value="BRI">BRI (Corporate/CMS)</option>
                     <option value="BSI">BSI</option>
+                    <option value="BTN">BTN</option>
                     <option value="MAYBANK">Maybank</option>
                     <option value="JATIM">Bank Jatim</option>
                 </select>
@@ -116,7 +110,6 @@
 <script>
     let db = [];
     
-    // Database Rekening & Pemetaan Bank
     const ACCOUNT_MAP = {
         "1020190001": { bank: "BNI", label: "PT SID - BNI 001" },
         "1040170002": { bank: "BNI", label: "PT SID - BNI 002" },
@@ -171,27 +164,6 @@
         }
     }
 
-    function extractBCAInfo(text, amt, type) {
-        if (!text) return { id: "-", kat: "-" };
-        let upperText = text.toUpperCase();
-        let kategori = "-";
-        let cleanId = "-";
-        if (type === 'DB' && (upperText.includes("BI-FAST") || upperText.includes("TRANSFER KE") || upperText.includes("BIAYA TXN KE"))) {
-            if (upperText.includes("BIAYA TXN") || amt === 2500) return { id: "-", kat: "Biaya Transfer Manual" };
-            if (upperText.includes("TRANSFER KE") || amt > 2500) return { id: "-", kat: "Manual" };
-        }
-        const isFee = upperText.includes("BA JASA E-BANKING") || upperText.includes("BIAYA AUTOTRANSFER") || upperText.includes("ATCHG");
-        const regex = /(N?BCA)-[A-Z0-9-]{5,}/i;
-        const match = text.match(regex);
-        if (match) {
-            cleanId = match[0].toUpperCase();
-            if (isFee) kategori = "Biaya Transfer Non BCA";
-            else if (cleanId.startsWith('NBCA')) kategori = "Non BCA";
-            else kategori = "Sesama BCA";
-        } else if (isFee) kategori = "Biaya Transfer Non BCA";
-        return { id: cleanId, kat: kategori };
-    }
-
     function parseDynamicDate(dateStr) {
         if (!dateStr) return null;
         let clean = dateStr.toString().trim().replace(/"/g, '').toUpperCase();
@@ -226,7 +198,7 @@
     }
 
     function cleanAmt(val) {
-        if (!val) return 0;
+        if (!val || val === "0") return 0;
         let s = val.toString().replace(/CR|DB/gi, '').replace(/,/g, '').replace(/"/g, '').trim();
         return parseFloat(s) || 0;
     }
@@ -253,8 +225,8 @@
                         if (!r[tglCol] || r[tglCol].toLowerCase().includes("saldo")) continue;
                         let dateInfo = parseDynamicDate(r[tglCol]);
                         if (!dateInfo) continue;
-                        let isCr = (r[jmlCol] || "").toUpperCase().includes("CR"), amt = cleanAmt(r[jmlCol]), trx = extractBCAInfo(r[ketCol], amt, isCr ? "CR" : "DB");
-                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc: r[ketCol], deb: isCr ? 0 : amt, cre: isCr ? amt : 0, status: "" });
+                        let isCr = (r[jmlCol] || "").toUpperCase().includes("CR"), amt = cleanAmt(r[jmlCol]);
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc: r[ketCol], deb: isCr ? 0 : amt, cre: isCr ? amt : 0, status: "" });
                     }
                 } else if (bank === 'JATIM') {
                     let headerIdx = raw.findIndex(r => r.some(c => c && c.toLowerCase().includes("posting date")));
@@ -263,6 +235,21 @@
                     for (let i = headerIdx + 1; i < raw.length; i++) {
                         let r = raw[i];
                         if (!r[tglCol]) continue;
+                        let dateInfo = parseDynamicDate(r[tglCol]);
+                        if (!dateInfo) continue;
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: r[refCol] || "-", kategori: "-", desc: r[ketCol], deb: cleanAmt(r[debCol]), cre: cleanAmt(r[creCol]), status: "" });
+                    }
+                } else if (bank === 'BTN') {
+                    let headers = raw[0].map(h => (h || "").toLowerCase().trim());
+                    let tglCol = headers.indexOf("posting date"),
+                        ketCol = headers.indexOf("description"),
+                        debCol = headers.indexOf("debit"),
+                        creCol = headers.indexOf("credit"),
+                        refCol = headers.indexOf("reff no.");
+                    for (let i = 1; i < raw.length; i++) {
+                        let r = raw[i];
+                        // Abaikan baris total atau baris kosong
+                        if (!r[tglCol] || r[tglCol].toLowerCase().includes("total") || isNaN(parseInt(r[0]))) continue;
                         let dateInfo = parseDynamicDate(r[tglCol]);
                         if (!dateInfo) continue;
                         db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: r[refCol] || "-", kategori: "-", desc: r[ketCol], deb: cleanAmt(r[debCol]), cre: cleanAmt(r[creCol]), status: "" });
@@ -297,8 +284,7 @@
             return mS && mD && mT;
         }).sort((a,b) => new Date(a.iso) - new Date(b.iso)).forEach(i => {
             sD += i.deb; sC += i.cre;
-            let katClass = i.kategori === "Sesama BCA" ? "bg-sesama" : (i.kategori === "Non BCA" ? "bg-non" : (i.kategori === "Biaya Transfer Non BCA" ? "bg-biaya" : (i.kategori === "Manual" ? "bg-manual" : "")));
-            html += `<tr><td>${i.displayDate}</td><td style="font-size:10px">${i.desc}</td><td class="num-col txt-red">${i.deb > 0 ? i.deb.toLocaleString('en-US',{minimumFractionDigits:2}) : '0.00'}</td><td class="num-col txt-green">${i.cre > 0 ? i.cre.toLocaleString('en-US',{minimumFractionDigits:2}) : '0.00'}</td><td class="trx-id">${i.trxId}</td><td><span class="kat-badge ${katClass}">${i.kategori}</span></td><td style="text-align:center">-</td></tr>`;
+            html += `<tr><td>${i.displayDate}</td><td style="font-size:10px">${i.desc}</td><td class="num-col txt-red">${i.deb > 0 ? i.deb.toLocaleString('en-US',{minimumFractionDigits:2}) : '0.00'}</td><td class="num-col txt-green">${i.cre > 0 ? i.cre.toLocaleString('en-US',{minimumFractionDigits:2}) : '0.00'}</td><td class="trx-id">${i.trxId}</td><td><span class="kat-badge">${i.kategori}</span></td><td style="text-align:center">-</td></tr>`;
         });
         document.getElementById('tableData').innerHTML = html || '<tr><td colspan="7" style="text-align:center; padding:20px;">Data tidak ditemukan.</td></tr>';
         document.getElementById('dispDebit').innerText = sD.toLocaleString('en-US', {minimumFractionDigits:2});
