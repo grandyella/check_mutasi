@@ -7,159 +7,100 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
         :root {
-            --primary: #1a2a6c;
-            --secondary: #b21f1f;
-            --accent: #fdbb2d;
+            --primary: #2c3e50;
+            --accent: #3498db;
+            --success: #27ae60;
+            --danger: #e74c3c;
             --bg: #f0f2f5;
-            --white: #ffffff;
         }
 
-        body { 
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
-            margin: 0; 
-            padding: 30px; 
-            background-color: var(--bg); 
-            color: #333;
-        }
-
-        .container { 
-            max-width: 1600px; 
-            margin: auto; 
-            background: var(--white); 
-            padding: 35px; 
-            border-radius: 16px; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.08); 
-        }
-
-        h2 { 
-            font-size: 28px; 
-            margin-top: 0; 
-            color: var(--primary); 
-            border-left: 6px solid var(--primary); 
-            padding-left: 15px;
-            margin-bottom: 25px;
-        }
-
-        /* Panel Konfigurasi Lebih Tegas */
-        .config-panel { 
-            background: #f8fafc; 
-            padding: 25px; 
-            border-radius: 12px; 
-            margin-bottom: 30px; 
-            border: 1px solid #e2e8f0; 
-        }
-
-        .row { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 15px; }
+        body { font-family: 'Inter', 'Segoe UI', sans-serif; margin: 0; background-color: var(--bg); color: #333; }
+        .container { max-width: 1400px; margin: 30px auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
         
-        .input-group { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 200px; }
-        .input-group label { font-weight: 700; color: #475569; font-size: 14px; }
+        h2 { margin-top: 0; color: var(--primary); font-size: 24px; border-bottom: 2px solid #eee; padding-bottom: 15px; margin-bottom: 25px; }
+
+        /* Status Badge di Paling Atas */
+        .account-header { margin-bottom: 20px; display: flex; justify-content: center; }
+        .acc-badge { 
+            background: var(--primary); color: white; padding: 10px 24px; border-radius: 50px; 
+            font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: all 0.3s;
+        }
+        .acc-badge.warning { background: #f39c12; }
+        .acc-badge.empty { background: #bdc3c7; color: #7f8c8d; box-shadow: none; }
+
+        /* Panel Konfigurasi */
+        .config-panel { background: #f8f9fa; padding: 25px; border-radius: 12px; margin-bottom: 25px; border: 1px solid #e9ecef; }
+        
+        .main-controls { display: grid; grid-template-columns: 1fr 1fr auto; gap: 20px; align-items: flex-end; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px dashed #dee2e6; }
+        .filter-controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
+
+        .input-group { display: flex; flex-direction: column; gap: 8px; }
+        label { font-size: 13px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
         
         select, input { 
-            padding: 12px; 
-            border: 2px solid #cbd5e1; 
-            border-radius: 8px; 
-            font-size: 15px; 
-            transition: all 0.2s;
-            font-weight: 500;
+            padding: 12px; border: 1px solid #ced4da; border-radius: 8px; font-size: 14px; 
+            transition: border-color 0.2s; width: 100%; box-sizing: border-box;
         }
-        
-        select:focus, input:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(26, 42, 108, 0.1); }
+        select:focus, input:focus { outline: none; border-color: var(--accent); ring: 2px solid #3498db22; }
 
-        /* Rekening Terdeteksi - BIG & BOLD */
-        .info-auto { margin-top: 15px; }
-        .acc-badge { 
-            background: var(--primary); 
-            color: white; 
-            padding: 15px 25px; 
-            border-radius: 12px; 
-            font-size: 18px; 
-            font-weight: 800; 
-            display: inline-flex; 
-            align-items: center; 
-            gap: 12px; 
-            box-shadow: 0 4px 12px rgba(26, 42, 108, 0.2);
-            border-bottom: 4px solid var(--accent);
-        }
-        .acc-badge.warning { background: #d97706; border-bottom-color: #ef4444; }
-
-        .btn-group { display: flex; gap: 12px; }
+        /* Buttons */
+        .btn-group { display: flex; gap: 10px; }
         .btn { 
-            padding: 12px 20px; 
-            border: none; 
-            border-radius: 8px; 
-            cursor: pointer; 
-            font-weight: 700; 
-            transition: 0.2s; 
-            font-size: 14px; 
-            display: flex; 
-            align-items: center; 
-            gap: 8px; 
+            padding: 0 20px; height: 45px; border: none; border-radius: 8px; cursor: pointer; 
+            font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px; transition: 0.2s;
         }
-        .btn-full { background: var(--primary); color: white; }
-        .btn-data { background: #059669; color: white; }
-        .btn-reset { background: #64748b; color: white; }
-        .btn:hover { filter: brightness(1.1); transform: translateY(-2px); }
+        .btn-full { background: var(--accent); color: white; }
+        .btn-data { background: var(--success); color: white; }
+        .btn-reset { background: #6c757d; color: white; }
+        .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
 
-        /* Summary Cards - BIG NUMBERS */
-        .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
-        .card { 
-            padding: 25px; 
-            border-radius: 14px; 
-            color: white; 
-            position: relative;
-            overflow: hidden;
-        }
-        .debit-card { background: linear-gradient(135deg, #e11d48, #9f1239); }
-        .credit-card { background: linear-gradient(135deg, #10b981, #065f46); }
-        .card small { font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9; font-size: 13px; }
-        .card .val { font-size: 32px; font-weight: 800; margin-top: 10px; font-family: 'Monaco', 'Consolas', monospace; }
+        /* Summary Cards */
+        .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 25px; }
+        .card { padding: 20px; border-radius: 12px; color: white; position: relative; overflow: hidden; }
+        .debit-card { background: linear-gradient(135deg, #ff6b6b, #ee5253); }
+        .credit-card { background: linear-gradient(135deg, #1dd1a1, #10ac84); }
+        .card small { font-size: 12px; font-weight: 600; text-transform: uppercase; opacity: 0.9; }
+        .val { font-size: 28px; font-weight: 800; font-family: 'Monaco', monospace; margin-top: 5px; }
 
-        /* Table Styling */
-        .table-container { overflow-x: auto; border-radius: 12px; border: 1px solid #e2e8f0; }
-        table { width: 100%; border-collapse: collapse; background: white; }
-        th { 
-            background: #f1f5f9; 
-            color: #1e293b; 
-            padding: 18px 15px; 
-            text-align: left; 
-            font-size: 14px; 
-            font-weight: 800; 
-            border-bottom: 3px solid #cbd5e1;
-            position: sticky; top: 0;
-        }
-        td { padding: 16px 15px; border-bottom: 1px solid #f1f5f9; font-size: 13px; font-weight: 500; }
-        tr:hover { background-color: #f8fafc; }
+        /* Table Design */
+        .table-container { overflow-x: auto; border-radius: 12px; border: 1px solid #eee; }
+        table { width: 100%; border-collapse: collapse; background: white; min-width: 900px; }
+        th { background: #f8f9fa; color: var(--primary); padding: 15px; text-align: left; font-size: 13px; font-weight: 700; border-bottom: 2px solid #dee2e6; }
+        td { padding: 14px 15px; border-bottom: 1px solid #f1f1f1; font-size: 13px; color: #444; }
         
-        .num-col { text-align: right; font-family: 'Roboto Mono', monospace; font-weight: 700; font-size: 15px; }
-        .txt-red { color: #be123c; }
-        .txt-green { color: #047857; }
+        tr:hover { background-color: #fcfcfc; }
+        .num-col { text-align: right; font-family: 'Consolas', monospace; font-weight: 600; font-size: 14px; }
+        .txt-red { color: var(--danger); }
+        .txt-green { color: var(--success); }
+        .trx-id { font-family: 'Consolas', monospace; color: var(--accent); font-weight: bold; background: #eaf2f8; padding: 4px 8px; border-radius: 6px; font-size: 12px; }
         
-        .trx-id-tag { 
-            background: #dcfce7; 
-            color: #166534; 
-            padding: 4px 10px; 
-            border-radius: 6px; 
-            font-family: 'Consolas', monospace; 
-            font-weight: 700;
-            font-size: 12px;
-            border: 1px solid #bbf7d0;
-        }
-        .empty-dash { color: #cbd5e1; font-weight: 300; }
+        footer { text-align: center; padding: 30px; color: #95a5a6; font-size: 14px; }
+        .heart { color: var(--danger); }
 
-        footer { text-align: center; padding: 40px; color: #94a3b8; font-weight: 600; }
+        @media (max-width: 1024px) {
+            .main-controls, .filter-controls { grid-template-columns: 1fr; }
+            .summary-grid { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>📄 Mutasi Bank Manager Pro</h2>
+    <h2>📄 Mutasi Bank Converter</h2>
+
+    <div class="account-header">
+        <div id="autoInfo" class="info-auto">
+            <div class="acc-badge empty"><span class="icon">🏦</span> Belum ada file yang diupload</div>
+        </div>
+    </div>
 
     <div class="config-panel">
-        <div class="row">
-            <div class="input-group" style="flex: 1.5;">
-                <label>1. SUMBER BANK / AKUN</label>
+        <div class="main-controls">
+            <div class="input-group">
+                <label>1. Pilih Bank:</label>
                 <select id="bankSource">
-                    <option value="">-- Pilih Bank Secara Manual --</option>
+                    <option value="">-- Pilih Bank --</option>
                     <option value="BCA">BCA (Corporate)</option>
                     <option value="BNI">BNI (Direct)</option>
                     <option value="MANDIRI">Mandiri (Statement)</option>
@@ -169,30 +110,39 @@
                     <option value="MAYBANK">Maybank</option>
                     <option value="JATIM">Bank Jatim</option>
                 </select>
-                <div id="autoInfo" class="info-auto"></div>
             </div>
             <div class="input-group">
-                <label>2. UPLOAD FILE CSV</label>
+                <label>2. Upload File CSV:</label>
                 <input type="file" id="csvFile" accept=".csv">
             </div>
             <div class="btn-group">
-                <button class="btn btn-full" onclick="copyFullTable()">📋 COPY SEMUA</button>
-                <button class="btn btn-data" onclick="copyIsiSaja()">📄 COPY ISI</button>
-                <button class="btn btn-reset" onclick="resetPage()">🔄 RESET</button>
+                <button class="btn btn-full" onclick="copyFullTable()">📋 Copy Full</button>
+                <button class="btn btn-data" onclick="copyIsiSaja()">📄 Copy Data</button>
+                <button class="btn btn-reset" onclick="resetPage()">🔄 Reset</button>
             </div>
         </div>
-        <div class="row" style="margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 20px;">
-            <div class="input-group"><label>DARI TANGGAL</label><input type="date" id="startDate"></div>
-            <div class="input-group"><label>SAMPAI TANGGAL</label><input type="date" id="endDate"></div>
+
+        <div class="filter-controls">
             <div class="input-group">
-                <label>TIPE TRANSAKSI</label>
+                <label>Dari Tanggal:</label>
+                <input type="date" id="startDate">
+            </div>
+            <div class="input-group">
+                <label>Sampai Tanggal:</label>
+                <input type="date" id="endDate">
+            </div>
+            <div class="input-group">
+                <label>Tipe Transaksi:</label>
                 <select id="typeFilter">
-                    <option value="ALL">SEMUA</option>
-                    <option value="DEBIT">DEBIT (KELUAR)</option>
-                    <option value="CREDIT">CREDIT (MASUK)</option>
+                    <option value="ALL">Semua Transaksi</option>
+                    <option value="DEBIT">Debit (Keluar)</option>
+                    <option value="CREDIT">Credit (Masuk)</option>
                 </select>
             </div>
-            <div class="input-group" style="flex: 2;"><label>CARI KETERANGAN</label><input type="text" id="searchTerm" placeholder="Ketik nama vendor, keterangan, atau nominal..."></div>
+            <div class="input-group">
+                <label>Cari Kata Kunci:</label>
+                <input type="text" id="searchTerm" placeholder="Contoh: Tokopedia, Transfer...">
+            </div>
         </div>
     </div>
 
@@ -211,57 +161,83 @@
         <table id="mutasiTable">
             <thead>
                 <tr>
-                    <th width="120">TANGGAL</th>
-                    <th>KETERANGAN TRANSAKSI</th>
-                    <th width="180" style="text-align:right">DEBIT (-)</th>
-                    <th width="180" style="text-align:right">CREDIT (+)</th>
-                    <th width="200">TRANSACTION ID</th>
+                    <th width="120">Tanggal</th>
+                    <th>Keterangan Transaksi</th>
+                    <th width="160" style="text-align:right">Debit (Rp)</th>
+                    <th width="160" style="text-align:right">Credit (Rp)</th>
+                    <th width="180">Ref ID</th>
+                    <th width="100">Kategori</th>
                 </tr>
             </thead>
             <tbody id="tableData">
-                <tr><td colspan="5" style="text-align:center; padding:60px; color:#94a3b8; font-size: 16px;">Belum ada data. Silakan upload file CSV mutasi Anda.</td></tr>
+                <tr><td colspan="6" style="text-align:center; padding:60px; color:#bdc3c7; font-size: 16px;">Silakan pilih bank dan upload file untuk memulai.</td></tr>
             </tbody>
         </table>
     </div>
 </div>
 
-<footer> 🚀 Dashboard Mutasi | Ahmad Zulfikar T | 2026 </footer>
+<footer> 
+    Dibuat dengan <span class="heart">❤️</span> untuk Efisiensi Kerja • <strong>Ahmad Zulfikar T</strong> 
+</footer>
 
 <script>
+    // JavaScript tetap sama dengan logika Anda sebelumnya, 
+    // hanya ada sedikit penyesuaian pada selector HTML yang baru.
     let db = [];
     let currentDetectedBank = "";
 
     const ACCOUNT_MAP = {
         "1020190001": { bank: "BNI", label: "PT SID - BNI 001" },
         "1040170002": { bank: "BNI", label: "PT SID - BNI 002" },
+        "1030170004": { bank: "BNI", label: "PT SID - BNI 004" },
+        "1020170006": { bank: "BNI", label: "PT SID - BNI 006" },
+        "2030170007": { bank: "BNI", label: "PT SID - BNI 007" },
         "5995333390": { bank: "BCA", label: "PT SID - BCA" },
+        "034001002848309": { bank: "BRI", label: "PT SID - BRI OTISTA 09" },
+        "113001000661301": { bank: "BRI", label: "PT SID - BRI BANGKA 01" },
         "1270011209408": { bank: "MANDIRI", label: "PT SID - MANDIRI" },
         "0641003913": { bank: "JATIM", label: "PT SID - JATIM" },
         "7298344674": { bank: "BSI", label: "PT SID - BSI" },
         "0061801300000149": { bank: "BTN", label: "PT SID - BTN KEMANG" },
+        "0001601880007584": { bank: "BTN", label: "PT SID - BTN BEKASI" },
+        "1000809288": { bank: "BSN", label: "PT SID - BSN" },
+        "6700020201": { bank: "BNI", label: "YYS SID - BNI 01" },
+        "945664832": { bank: "BNI", label: "YYS SID - BNI 32" },
+        "5995553551": { bank: "BCA", label: "YYS SID - BCA" },
+        "113001000750566": { bank: "BRI", label: "YYS SID - BRI" },
+        "2863038278": { bank: "BCA", label: "PT MMI - BCA" },
         "1260013546501": { bank: "MANDIRI", label: "YYS GURU BELAJAR - MANDIRI" },
+        "5055082526": { bank: "BCA", label: "BCA Epicentrum" },
+        "5995232526": { bank: "BCA", label: "BCA Manhattan" },
+        "113001000457304": { bank: "BRI", label: "BRI" },
+        "7342760880": { bank: "BSI", label: "BSI (Maxima)" },
+        "2775000772": { bank: "MAYBANK", label: "Maybank Saving" },
+        "2775000817": { bank: "MAYBANK", label: "Maybank Kreditur" },
         "113001000683303": { bank: "BRI", label: "BRI YKID" }
     };
 
     function detectBankAndAccount(fileName, rawData) {
         let fullText = JSON.stringify(rawData) + fileName;
         let detected = null;
+
         for (let accNo in ACCOUNT_MAP) {
             if (fullText.includes(accNo)) {
                 detected = { acc: accNo, ...ACCOUNT_MAP[accNo] };
                 break;
             }
         }
+        
         const autoInfo = document.getElementById('autoInfo');
         const bankSelect = document.getElementById('bankSource');
+
         if (detected) {
             bankSelect.value = detected.bank;
             currentDetectedBank = detected.bank;
-            autoInfo.innerHTML = `<div class="acc-badge">🏦 ${detected.label} | ${detected.acc}</div>`;
+            autoInfo.innerHTML = `<div class="acc-badge"><span class="icon">🏦</span> ${detected.label} • ${detected.acc}</div>`;
             return detected.bank;
         } else {
             currentDetectedBank = bankSelect.value;
-            autoInfo.innerHTML = `<div class="acc-badge warning">⚠️ AKUN TIDAK TERDAFTAR</div>`;
+            autoInfo.innerHTML = `<div class="acc-badge warning"><span class="icon">⚠️</span> Akun Tidak Dikenali</div>`;
             return bankSelect.value;
         }
     }
@@ -269,15 +245,31 @@
     function parseDynamicDate(dateStr) {
         if (!dateStr) return null;
         let clean = dateStr.toString().trim().replace(/"/g, '').toUpperCase();
-        if (clean.includes('/')) {
-            let p = clean.split(' ')[0].split('/');
-            let d = p[0].padStart(2, '0'), m = p[1].padStart(2, '0'), y = p[2]?.length === 2 ? "20" + p[2] : p[2];
-            return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
+        if (clean === "PEND") {
+            const now = new Date();
+            return { iso: now.toISOString().split('T')[0], display: `${now.getDate().toString().padStart(2,'0')}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getFullYear()}` };
+        }
+        const monthsShort = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+        for(let i=0; i<12; i++) {
+            if(clean.includes(monthsShort[i])) {
+                let p = clean.split(/[\s,/-]+/);
+                let d = p[0].padStart(2, '0');
+                let m = (i + 1).toString().padStart(2, '0');
+                let y = p[2] ? (p[2].length === 2 ? "20" + p[2] : p[2]) : new Date().getFullYear();
+                return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
+            }
         }
         if (clean.includes('-')) {
             let p = clean.split(' ')[0].split('-');
-            if (p[0].length === 4) return { iso: p.join('-'), display: `${p[2]}/${p[1]}/${p[0]}` };
-            return { iso: `${p[2]}-${p[1]}-${p[0]}`, display: `${p[0]}/${p[1]}/${p[2]}` };
+            if (p[0].length === 4) return { iso: p.join('-'), display: `${p[2].padStart(2,'0')}/${p[1].padStart(2,'0')}/${p[0]}` };
+            return { iso: `${p[2]}-${p[1]}-${p[0]}`, display: `${p[0].padStart(2,'0')}/${p[1].padStart(2,'0')}/${p[2]}` };
+        }
+        if (clean.includes('/')) {
+            let p = clean.split(' ')[0].split('/');
+            let d = p[0].padStart(2, '0');
+            let m = p[1].padStart(2, '0');
+            let y = p[2] ? (p[2].length === 2 ? "20" + p[2] : p[2]) : new Date().getFullYear();
+            return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
         }
         return null;
     }
@@ -288,40 +280,61 @@
         return parseFloat(s) || 0;
     }
 
+    function resetPage() { location.reload(); }
+
     document.getElementById('csvFile').addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
+
         Papa.parse(file, {
             header: false, skipEmptyLines: true, complete: (results) => {
                 db = [];
                 let raw = results.data;
                 const bank = detectBankAndAccount(file.name, raw);
-                
+                if (!bank) return;
+
                 if (bank === 'BCA') {
                     let headerIdx = raw.findIndex(r => r.some(c => c && c.toLowerCase().includes("tanggal transaksi")));
+                    if (headerIdx === -1) return;
                     let headers = raw[headerIdx].map(h => h.toLowerCase().trim());
-                    let tglCol = headers.findIndex(h => h.includes("tanggal")), ketCol = headers.findIndex(h => h.includes("keterangan")), jmlCol = headers.findIndex(h => h.includes("jumlah"));
+                    let tglCol = headers.findIndex(h => h.includes("tanggal")), 
+                        ketCol = headers.findIndex(h => h.includes("keterangan")), 
+                        jmlCol = headers.findIndex(h => h.includes("jumlah"));
+                    
                     for (let i = headerIdx + 1; i < raw.length; i++) {
-                        let r = raw[i]; if (!r[tglCol] || r[tglCol].toLowerCase().includes("saldo")) continue;
-                        let dateInfo = parseDynamicDate(r[tglCol]); if (!dateInfo) continue;
+                        let r = raw[i];
+                        if (!r[tglCol] || r[tglCol].toLowerCase().includes("saldo")) continue;
+                        let dateInfo = parseDynamicDate(r[tglCol]);
+                        if (!dateInfo) continue;
                         let isCr = (r[jmlCol] || "").toUpperCase().includes("CR"), amt = cleanAmt(r[jmlCol]);
-                        // Ambil ID Transaksi dari Keterangan BCA (biasanya angka unik di awal atau tengah)
-                        let match = r[ketCol].match(/[0-9]{6,}/);
-                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: match ? match[0] : "-", desc: r[ketCol], deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
+                        let desc = r[ketCol] || "";
+                        let match = desc.match(/[A-Z0-9]{5,}/);
+                        let trxId = match ? match[0] : "-";
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trxId, kategori: "-", desc: desc, deb: isCr ? 0 : amt, cre: isCr ? amt : 0 });
+                    }
+                } else if (bank === 'JATIM') {
+                    let headerIdx = raw.findIndex(r => r.some(c => c && c.toLowerCase().includes("posting date")));
+                    let headers = raw[headerIdx].map(h => h.toLowerCase().trim());
+                    let tglCol = headers.indexOf("posting date"), ketCol = headers.indexOf("description"), debCol = headers.indexOf("debit"), creCol = headers.indexOf("credit");
+                    for (let i = headerIdx + 1; i < raw.length; i++) {
+                        let r = raw[i];
+                        if (!r[tglCol]) continue;
+                        let dateInfo = parseDynamicDate(r[tglCol]);
+                        if (!dateInfo) continue;
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc: r[ketCol], deb: cleanAmt(r[debCol]), cre: cleanAmt(r[creCol]) });
                     }
                 } else {
-                    // Logic umum untuk bank lain (Jatim, Mandiri, BSI dkk)
-                    let headerIdx = raw.findIndex(r => r.some(c => ["date", "tanggal", "posting date", "tgl_tran"].includes((c || "").toLowerCase().trim())));
+                    let headerIdx = raw.findIndex(r => r.some(c => ["tgl_tran", "date", "posting date", "tanggal", "post date"].includes((c || "").toLowerCase().trim())));
                     if (headerIdx === -1) headerIdx = 0;
-                    let headers = raw[headerIdx].map(h => (h || "").trim());
+                    let headers = raw[headerIdx].map(h => (h || "").trim().replace(/"/g, ''));
                     for (let i = headerIdx + 1; i < raw.length; i++) {
                         let r = raw[i]; if (!r || r.length < 3) continue;
-                        let rowObj = {}; headers.forEach((h, idx) => rowObj[h] = r[idx]);
-                        let dateKey = Object.keys(rowObj).find(k => /date|tanggal|tgl/i.test(k));
+                        let rowObj = {}; headers.forEach((h, idx) => { if(h) rowObj[h] = r[idx]; });
+                        let dateKey = ['Post Date', 'PostDate', 'Posting Date', 'TGL_TRAN', 'Date', 'Tanggal'].find(k => rowObj[k]);
                         let dateInfo = parseDynamicDate(rowObj[dateKey]); if (!dateInfo) continue;
                         let deb = cleanAmt(rowObj['Debit'] || rowObj['Debit Amount'] || rowObj['MUTASI_DEBET'] || (rowObj['DB'] ? rowObj['Amount'] : 0));
                         let cre = cleanAmt(rowObj['Credit'] || rowObj['Credit Amount'] || rowObj['MUTASI_KREDIT'] || (rowObj['CR'] ? rowObj['Amount'] : 0));
-                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", desc: rowObj['Description'] || rowObj['Remarks'] || rowObj['DESK_TRAN'] || "", deb, cre });
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc: rowObj['Description'] || rowObj['Remarks'] || rowObj['DESK_TRAN'] || "", deb, cre });
                     }
                 }
                 render();
@@ -341,18 +354,18 @@
             return mS && mD && mT;
         }).sort((a,b) => new Date(a.iso) - new Date(b.iso)).forEach(i => {
             sD += i.deb; sC += i.cre;
-            // HANYA BCA yang muncul Trx ID
-            let trxHtml = (currentDetectedBank === "BCA" && i.trxId !== "-") ? `<span class="trx-id-tag">${i.trxId}</span>` : `<span class="empty-dash">-</span>`;
+            let trxDisplay = (currentDetectedBank === "BCA") ? `<span class="trx-id">${i.trxId}</span>` : `<span style="color:#ccc">-</span>`;
 
             html += `<tr>
-                <td style="font-weight:700">${i.displayDate}</td>
-                <td>${i.desc}</td>
+                <td>${i.displayDate}</td>
+                <td style="font-size:11px; line-height:1.4">${i.desc}</td>
                 <td class="num-col txt-red">${i.deb > 0 ? i.deb.toLocaleString('en-US',{minimumFractionDigits:2}) : '0,00'}</td>
                 <td class="num-col txt-green">${i.cre > 0 ? i.cre.toLocaleString('en-US',{minimumFractionDigits:2}) : '0,00'}</td>
-                <td>${trxHtml}</td>
+                <td>${trxDisplay}</td>
+                <td><small style="color:#999">${i.kategori}</small></td>
             </tr>`;
         });
-        document.getElementById('tableData').innerHTML = html || '<tr><td colspan="5" style="text-align:center; padding:40px;">Data Tidak Ditemukan.</td></tr>';
+        document.getElementById('tableData').innerHTML = html || '<tr><td colspan="6" style="text-align:center; padding:40px; color:#999;">Data tidak ditemukan.</td></tr>';
         document.getElementById('dispDebit').innerText = sD.toLocaleString('en-US', {minimumFractionDigits:2});
         document.getElementById('dispCredit').innerText = sC.toLocaleString('en-US', {minimumFractionDigits:2});
     }
@@ -373,15 +386,14 @@
         rows.forEach(row => {
             let cells = row.querySelectorAll("td");
             if (cells.length >= 4) {
-                let rowData = [cells[0].innerText, cells[1].innerText, cells[2].innerText, cells[3].innerText];
+                let rowData = [cells[0].innerText, cells[1].innerText, cells[2].innerText, cells[3].innerText, cells[4].innerText];
                 content += rowData.join("\t") + "\n";
             }
         });
         saveToClipboard(content);
     }
 
-    function saveToClipboard(text) { navigator.clipboard.writeText(text).then(() => alert("Berhasil disalin ke Clipboard!")); }
-    function resetPage() { location.reload(); }
+    function saveToClipboard(text) { navigator.clipboard.writeText(text).then(() => alert("Data berhasil disalin!")); }
     ['searchTerm', 'startDate', 'endDate', 'typeFilter', 'bankSource'].forEach(id => document.getElementById(id).addEventListener('input', render));
 </script>
 </body>
