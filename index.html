@@ -39,12 +39,14 @@
         .bg-biaya-manual { background: #16a085; }
         footer { text-align: center; padding: 20px; margin-top: 20px; color: #7f8c8d; font-size: 14px; border-top: 1px solid #eee; }
         .heart { color: #e74c3c; }
+        .acc-info { font-size: 18px; font-weight: bold; color: #2c3e50; margin-bottom: 15px; padding: 10px; background: #fff; border-left: 5px solid #3498db; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h2>📄 Convert Mutasi All Bank</h2>
+    <div id="displayAcc" class="acc-info">Rekening: -</div>
 
     <div class="config-panel">
         <div class="row">
@@ -58,6 +60,8 @@
                     <option value="BRI">BRI (Corporate/CMS)</option>
                     <option value="BSI">BSI</option>
                     <option value="MAYBANK">Maybank</option>
+                    <option value="JATIM">Bank Jatim</option>
+                    <option value="BTN">Bank BTN</option>
                 </select>
             </div>
             <div class="input-group">
@@ -113,6 +117,42 @@
 <script>
     let db = [];
 
+    // DATA MAPPING REKENING
+    const accountMap = {
+        // PT SID
+        "1020190001": "PT SID - BNI 001",
+        "1040170002": "PT SID - BNI 002",
+        "1030170004": "PT SID - BNI 004",
+        "1020170006": "PT SID - BNI 006",
+        "2030170007": "PT SID - BNI 007",
+        "5995333390": "PT SID - BCA",
+        "034001002848309": "PT SID - BRI OTISTA 09",
+        "113001000661301": "PT SID - BRI BANGKA 01",
+        "1270011209408": "PT SID - MANDIRI",
+        "0641003913": "PT SID - JATIM",
+        "7298344674": "PT SID - BSI",
+        "0061801300000149": "PT SID - BTN KEMANG 0149",
+        "0001601880007584": "PT SID - BTN BEKASI 7584",
+        "1000809288": "PT SID - BSN",
+        
+        // Yayasan SID
+        "6700020201": "Yayasan SID - BNI 01",
+        "945664832": "Yayasan SID - BNI 32",
+        "5995553551": "Yayasan SID - BCA",
+        "113001000750566": "Yayasan SID - BRI",
+        
+        // Lainnya
+        "2863038278": "PT MMI",
+        "1260013546501": "Yayasan Guru Belajar",
+        "5055082526": "BCA Epicentrum",
+        "5995232526": "BCA Manhattan",
+        "113001000457304": "BRI",
+        "7342760880": "BSI",
+        "2775000772": "Maybank Saving",
+        "2775000817": "Maybank Kreditur",
+        "113001000683303": "BRI YKID"
+    };
+
     function extractBCAInfo(text, amt, type) {
         if (!text) return { id: "-", kat: "-" };
         let upperText = text.toUpperCase();
@@ -152,7 +192,14 @@
             return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
         }
 
-        // Handle format teks bulan (BCA/Bank Lain)
+        if (clean.length === 5 && clean.includes('/')) {
+            let p = clean.split('/');
+            let d = p[0].padStart(2, '0');
+            let m = p[1].padStart(2, '0');
+            let y = new Date().getFullYear();
+            return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
+        }
+
         const months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
         const monthsShort = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
         
@@ -166,14 +213,12 @@
             }
         }
 
-        // Format YYYY-MM-DD
         if (clean.includes('-')) {
             let p = clean.split(' ')[0].split('-');
             if (p[0].length === 4) return { iso: p.join('-'), display: `${p[2]}/${p[1]}/${p[0]}` };
             return { iso: `${p[2]}-${p[1]}-${p[0]}`, display: `${p[0]}/${p[1]}/${p[2]}` };
         }
 
-        // Format DD/MM/YY atau DD/MM/YYYY
         if (clean.includes('/')) {
             let p = clean.split(' ')[0].split('/');
             let d = p[0].padStart(2, '0');
@@ -203,9 +248,32 @@
             header: false, skipEmptyLines: true, complete: (results) => {
                 db = [];
                 let raw = results.data;
+
+                // DETEKSI NO REKENING
+                let detectedAcc = "-";
+                if (bank === 'BCA') {
+                    const accRow = raw.find(r => r.some(c => c && c.includes("No. rekening")));
+                    if (accRow) {
+                        const cell = accRow.find(c => c.includes("No. rekening"));
+                        const match = cell.match(/\d+/);
+                        if (match) detectedAcc = match[0];
+                    }
+                }
                 
+                if (detectedAcc === "-") {
+                    const matchFile = file.name.match(/\d{10,}/);
+                    if (matchFile) detectedAcc = matchFile[0];
+                }
+
+                // MAPPING NAMA REKENING BERDASARKAN DATABASE
+                // Bersihkan no rek dari spasi/trim sebelum cek map
+                let cleanAcc = detectedAcc.trim();
+                let accountLabel = accountMap[cleanAcc] ? accountMap[cleanAcc] + " - " + cleanAcc : cleanAcc;
+                document.getElementById('displayAcc').innerText = "Rekening: " + accountLabel;
+
                 if (bank === 'BCA') {
                     let headerIdx = raw.findIndex(r => r.some(c => c && c.toLowerCase().includes("tanggal transaksi")));
+                    if (headerIdx === -1) return;
                     let headers = raw[headerIdx].map(h => h.toLowerCase().trim());
                     let tglCol = headers.findIndex(h => h.includes("tanggal"));
                     let ketCol = headers.findIndex(h => h.includes("keterangan"));
@@ -229,6 +297,17 @@
                         }
                         db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: trx.id, kategori: trx.kat, desc: r[ketCol], deb: isCr ? 0 : amt, cre: isCr ? amt : 0, status: statusText });
                     }
+                } else if (bank === 'JATIM' || bank === 'BTN') {
+                    let headerIdx = raw.findIndex(r => r.some(c => (c || "").toLowerCase().includes("posting date")));
+                    for (let i = headerIdx + 1; i < raw.length; i++) {
+                        let r = raw[i];
+                        if (!r[1] || isNaN(parseInt(r[0]))) continue;
+                        let dateInfo = parseDynamicDate(r[1]);
+                        if (!dateInfo) continue;
+                        let dVal = bank === 'JATIM' ? cleanAmt(r[7]) : cleanAmt(r[6]);
+                        let cVal = bank === 'JATIM' ? cleanAmt(r[8]) : cleanAmt(r[7]);
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc: r[5], deb: dVal, cre: cVal, status: "" });
+                    }
                 } else {
                     let headerIdx = raw.findIndex(r => r.some(c => ["tgl_tran", "date", "posting date", "tanggal", "post date", "postdate"].includes((c || "").toLowerCase().trim())));
                     if (headerIdx === -1) headerIdx = 0;
@@ -245,7 +324,7 @@
                         let deb = cleanAmt(rowObj['Debit'] || rowObj['Debit Amount'] || rowObj['MUTASI_DEBET'] || (rowObj['DB'] ? rowObj['Amount'] : 0));
                         let cre = cleanAmt(rowObj['Credit'] || rowObj['Credit Amount'] || rowObj['MUTASI_KREDIT'] || (rowObj['CR'] ? rowObj['Amount'] : 0));
                         
-                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: rowObj['FT Number'] || rowObj['ID'] || "-", kategori: "-", desc: rowObj['Description'] || rowObj['Remarks'] || rowObj['AdditionalDesc'] || rowObj['DESK_TRAN'] || "", deb, cre, status: "" });
+                        db.push({ iso: dateInfo.iso, displayDate: dateInfo.display, trxId: "-", kategori: "-", desc: rowObj['Description'] || rowObj['Remarks'] || rowObj['AdditionalDesc'] || rowObj['DESK_TRAN'] || "", deb, cre, status: "" });
                     }
                 }
                 render();
